@@ -101,6 +101,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
   const [newCourseBaseCredit, setNewCourseBaseCredit] = useState<number>(10000);
 
   const [editCourseName, setEditCourseName] = useState<string>(event.name);
+  const [editCourseInstitution, setEditCourseInstitution] = useState<string>(event.institution || "");
   const [editCourseSession, setEditCourseSession] = useState<string>(event.session);
   const [editCourseInviteCode, setEditCourseInviteCode] = useState<string>(event.inviteCode || "2026");
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
@@ -126,6 +127,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
       setRankTeamCount(projects.length);
     }
     setEditCourseName(event.name);
+    setEditCourseInstitution(event.institution || "");
     setEditCourseSession(event.session);
     setEditCourseInviteCode(event.inviteCode || "2026");
   }, [event, projects.length]);
@@ -447,6 +449,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
     }
     const res = await updateCourse({
       name: editCourseName.trim(),
+      institution: editCourseInstitution.trim(),
       session: editCourseSession.trim(),
       inviteCode: editCourseInviteCode.trim(),
     });
@@ -1562,16 +1565,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
 
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">현재 선택된 과정 정보 수정</h3>
-                <p className="text-xs text-slate-500 mt-0.5">과정명 및 입장 초대코드 번호를 변경합니다.</p>
+                <h3 className="font-bold text-slate-900 text-sm">현재 선택된 과정 명칭 및 초대코드 수정</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  여기서 수정한 <strong>과정명</strong>이 인터넷 브라우저 상단 탭 제목과 홈페이지 배너 제목으로 즉시 반영됩니다.
+                </p>
               </div>
               <form onSubmit={handleUpdateCurrentCourse} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">과정명</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    과정명 (인터넷 탭 & 상단 배너 제목)
+                  </label>
                   <input
                     type="text"
                     value={editCourseName}
                     onChange={(e) => setEditCourseName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">기관 / 학교명</label>
+                  <input
+                    type="text"
+                    value={editCourseInstitution}
+                    onChange={(e) => setEditCourseInstitution(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900"
                   />
                 </div>

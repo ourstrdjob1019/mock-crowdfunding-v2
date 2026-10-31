@@ -110,6 +110,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return events.find((e) => e.id === activeEventId) || events[0] || INITIAL_EVENT;
   }, [events, activeEventId]);
 
+  // 브라우저 인터넷 탭 제목(document.title)을 현재 과정별 명칭으로 실시간 동기화
+  useEffect(() => {
+    if (typeof document !== "undefined" && event?.name) {
+      document.title = `${event.name} · 레디스타트업 클라우드펀딩`;
+    }
+  }, [event?.name]);
+
   // 현재 과정(activeEventId)에 속한 프로젝트, 투자, 참가자 필터링
   const projects = useMemo(() => {
     return allProjects.filter((p) => (p.eventId || "evt-2026-v2-01") === event.id);

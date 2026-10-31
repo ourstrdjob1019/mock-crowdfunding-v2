@@ -230,14 +230,14 @@ function MainDashboard() {
                     <div className="max-w-xl space-y-2">
                       <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] sm:text-xs text-cyan-300 font-medium">
                         <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                        <span>2026 대학 스타트업 데모데이 크라우드펀딩</span>
+                        <span>{event.name} {event.session ? `· ${event.session}` : ""}</span>
                       </div>
                       <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
                         미래를 이끌 청년 창업팀에게<br className="hidden sm:inline" />
                         당신의 모의투자 크레딧을 베팅하세요
                       </h1>
                       <p className="text-xs sm:text-sm text-slate-300 leading-relaxed pt-1">
-                        모든 참여자에게 <span className="text-amber-400 font-mono font-bold">10,000 CR</span> 기본 지급. 건당 <span className="text-cyan-300 font-mono font-bold">2,000 ~ 5,000 CR</span> 분산 투자 가능하며, 실시간 펀딩 점수는 심사 평가에 자동 반영됩니다.
+                        모든 참여자에게 <span className="text-amber-400 font-mono font-bold">{event.baseCredit.toLocaleString()} CR</span> 기본 지급. 건당 <span className="text-cyan-300 font-mono font-bold">{event.minInvestment.toLocaleString()} ~ {event.maxInvestment.toLocaleString()} CR</span> 분산 투자 가능하며, 실시간 펀딩 점수는 심사 평가에 자동 반영됩니다.
                       </p>
                     </div>
 

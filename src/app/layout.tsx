@@ -22,8 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "레디스타트업 · 2026 서원대학교 SPARK 창업챌린지(모의 크라우드펀딩 대회)",
-  description: "2026 서원대학교 SPARK 창업챌린지(모의 크라우드펀딩 대회) - 레디스타트업 클라우드펀딩 플랫폼",
+  title: "레디스타트업 · 모의 클라우드펀딩 플랫폼",
+  description: "레디스타트업 모의 클라우드펀딩 플랫폼 V2",
 };
 
 export const viewport: Viewport = {
