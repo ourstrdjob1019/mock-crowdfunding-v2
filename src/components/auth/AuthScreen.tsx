@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/Button";
 import { 
@@ -14,21 +14,25 @@ import {
   Award,
   Users,
   School,
-  Hash
+  Hash,
+  KeyRound,
+  CheckCircle2
 } from "lucide-react";
 import { UserRole } from "@/types";
 
 export const AuthScreen: React.FC = () => {
-  const { login, register, projects, event, users, demoLogin } = useApp();
+  const { login, register, event, findCourseByInviteCode } = useApp();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   // 로그인 폼
+  const [loginInviteCode, setLoginInviteCode] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
   // 회원가입 폼
+  const [regInviteCode, setRegInviteCode] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regName, setRegName] = useState("");
@@ -37,10 +41,20 @@ export const AuthScreen: React.FC = () => {
   const [regRole, setRegRole] = useState<UserRole>("STUDENT");
   const [regPrivacyAgreed, setRegPrivacyAgreed] = useState(true);
 
+  const matchedLoginCourse = useMemo(() => {
+    if (!loginInviteCode.trim()) return undefined;
+    return findCourseByInviteCode(loginInviteCode);
+  }, [loginInviteCode, findCourseByInviteCode]);
+
+  const matchedRegCourse = useMemo(() => {
+    if (!regInviteCode.trim()) return undefined;
+    return findCourseByInviteCode(regInviteCode);
+  }, [regInviteCode, findCourseByInviteCode]);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
-    const res = await login(loginEmail, loginPassword);
+    const res = await login(loginEmail, loginPassword, loginInviteCode);
     if (!res.success) {
       setErrorMessage(res.message);
     }
@@ -50,8 +64,12 @@ export const AuthScreen: React.FC = () => {
     e.preventDefault();
     setErrorMessage("");
 
+    if (!regInviteCode.trim()) {
+      setErrorMessage("참여하실 과정의 초대코드 번호를 입력해 주세요.");
+      return;
+    }
     if (!regEmail.trim()) {
-      setErrorMessage("이메일 주소를 입력해 주세요.");
+      setErrorMessage("사용하실 아이디(또는 이메일)를 입력해 주세요.");
       return;
     }
     if (!regPassword.trim()) {
@@ -64,12 +82,13 @@ export const AuthScreen: React.FC = () => {
     }
 
     const res = await register({
+      inviteCode: regInviteCode.trim(),
       email: regEmail.trim(),
       password: regPassword.trim(),
       name: regName.trim(),
       department: regDepartment.trim() || (regRole === "STUDENT" ? "창업학부" : "운영위원회"),
       studentNumber: regStudentNumber.trim(),
-      institution: "서원대학교",
+      institution: matchedRegCourse?.institution || event.institution,
       role: regRole,
       privacyAgreed: regPrivacyAgreed,
     });
@@ -78,6 +97,8 @@ export const AuthScreen: React.FC = () => {
       setErrorMessage(res.message);
     }
   };
+
+  const displayCourse = matchedLoginCourse || matchedRegCourse || event;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col justify-between relative overflow-hidden py-10 px-4 sm:px-6">
@@ -90,15 +111,15 @@ export const AuthScreen: React.FC = () => {
           <Sparkles size={22} />
         </div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-          레디스타트업
+          레디스타트업 V2
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-          클라우드펀딩 플랫폼 · {event.name}
+          클라우드펀딩 플랫폼 · {displayCourse.name}
         </p>
 
         <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80 text-[11px] font-mono font-medium text-slate-600">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          {event.institution} · 시스템 가동 중
+          {displayCourse.institution} · 시스템 가동 중
         </div>
       </header>
 
@@ -120,7 +141,7 @@ export const AuthScreen: React.FC = () => {
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              로그인
+              로그인 (사전배정 계정)
             </button>
             <button
               type="button"
@@ -134,7 +155,7 @@ export const AuthScreen: React.FC = () => {
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              회원가입
+              초대코드 회원가입
             </button>
           </div>
 
@@ -149,18 +170,47 @@ export const AuthScreen: React.FC = () => {
           {/* 1. 로그인 폼 */}
           {mode === "login" && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {/* 과정 초대코드 번호 (선택 입력 - 입력 시 해당 과정 확인) */}
+              <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-2">
+                <label className="block text-xs font-bold text-blue-900">
+                  과정 초대코드 번호 <span className="text-[11px] font-normal text-blue-600">(사전 배정 아이디는 생략 가능)</span>
+                </label>
+                <div className="relative">
+                  <KeyRound size={16} className="absolute left-3.5 top-3 text-blue-500" />
+                  <input
+                    type="text"
+                    value={loginInviteCode}
+                    onChange={(e) => setLoginInviteCode(e.target.value)}
+                    placeholder="과정 초대코드 번호 입력 (예: 2026)"
+                    className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-white border border-blue-200 text-sm font-mono font-bold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all outline-none"
+                  />
+                </div>
+                {loginInviteCode.trim() && (
+                  matchedLoginCourse ? (
+                    <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                      <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      <span>확인됨: {matchedLoginCourse.name} ({matchedLoginCourse.institution})</span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-rose-600 font-medium">
+                      일치하는 과정 초대코드가 없습니다. 번호를 다시 확인해 주세요.
+                    </p>
+                  )
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  이메일 (아이디)
+                  아이디 (또는 이메일)
                 </label>
                 <div className="relative">
                   <Mail size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="등록된 이메일 주소 입력"
+                    placeholder="배정받은 아이디 또는 이메일 입력"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all outline-none"
                   />
                 </div>
@@ -185,12 +235,12 @@ export const AuthScreen: React.FC = () => {
 
               <div className="pt-2">
                 <Button type="submit" variant="primary" isFullWidth size="lg">
-                  로그인 <ArrowRight size={16} className="ml-2" />
+                  과정 입장 및 로그인 <ArrowRight size={16} className="ml-2" />
                 </Button>
               </div>
 
               <p className="text-center text-[11px] text-slate-400 pt-2">
-                계정이 없으신가요? 상단의 <strong>회원가입</strong> 탭에서 직접 가입하거나 관리자에게 문의하세요.
+                사전 배정받은 아이디가 없으신가요? 상단의 <strong>초대코드 회원가입</strong> 탭에서 초대코드 번호로 바로 가입하세요.
               </p>
             </form>
           )}
@@ -198,18 +248,52 @@ export const AuthScreen: React.FC = () => {
           {/* 2. 회원가입 폼 */}
           {mode === "register" && (
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
+              {/* 과정 초대코드 번호 필수 입력 */}
+              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2">
+                <label className="block text-xs font-bold text-blue-900">
+                  과정 초대코드 번호 (필수) *
+                </label>
+                <div className="relative">
+                  <KeyRound size={16} className="absolute left-3.5 top-3 text-blue-600" />
+                  <input
+                    type="text"
+                    required
+                    value={regInviteCode}
+                    onChange={(e) => setRegInviteCode(e.target.value)}
+                    placeholder="운영진에게 안내받은 초대코드 입력 (예: 2026)"
+                    className="w-full pl-10 pr-3.5 py-2 rounded-xl bg-white border border-blue-300 text-sm font-mono font-bold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all outline-none"
+                  />
+                </div>
+                {regInviteCode.trim() ? (
+                  matchedRegCourse ? (
+                    <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                      <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                      <span>입장 과정: {matchedRegCourse.name} ({matchedRegCourse.baseCredit.toLocaleString()} CR 지급)</span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-rose-600 font-medium">
+                      유효하지 않은 초대코드입니다. 운영진에게 초대코드 번호를 확인해 주세요.
+                    </p>
+                  )
+                ) : (
+                  <p className="text-[11px] text-slate-500">
+                    초대코드 번호를 입력하면 해당 교육/대회 과정으로 자동 연결됩니다.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  이메일 (아이디) *
+                  아이디 (또는 이메일) *
                 </label>
                 <div className="relative">
                   <Mail size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="로그인에 사용할 이메일"
+                    placeholder="로그인에 사용할 아이디 또는 이메일"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all outline-none"
                   />
                 </div>
@@ -253,7 +337,7 @@ export const AuthScreen: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    학과 / 전공 {regRole === "STUDENT" && <span className="text-blue-600">*</span>}
+                    학과 / 소속 {regRole === "STUDENT" && <span className="text-blue-600">*</span>}
                   </label>
                   <div className="relative">
                     <School size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
@@ -269,7 +353,7 @@ export const AuthScreen: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    학번 {regRole === "STUDENT" && <span className="text-blue-600">*</span>}
+                    학번 / 사번 {regRole === "STUDENT" && <span className="text-blue-600">*</span>}
                   </label>
                   <div className="relative">
                     <Hash size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
@@ -342,13 +426,13 @@ export const AuthScreen: React.FC = () => {
                   className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
                 <label htmlFor="privacy-check" className="text-xs text-slate-600 leading-snug cursor-pointer">
-                  <span className="font-semibold text-slate-800">[필수] 동의</span>: 가상 크라우드펀딩 모의 투자 참여 및 가상 크레딧(10,000 CR) 지급에 동의합니다.
+                  <span className="font-semibold text-slate-800">[필수] 동의</span>: 가상 크라우드펀딩 모의 투자 참여 및 가상 크레딧 지급에 동의합니다.
                 </label>
               </div>
 
               <div className="pt-2">
                 <Button type="submit" variant="primary" isFullWidth size="lg">
-                  가입 완료하고 10,000 CR 받기 <ArrowRight size={16} className="ml-2" />
+                  초대코드로 가입하고 입장하기 <ArrowRight size={16} className="ml-2" />
                 </Button>
               </div>
             </form>
@@ -360,7 +444,7 @@ export const AuthScreen: React.FC = () => {
       {/* 하단 푸터 */}
       <footer className="relative z-10 max-w-md w-full mx-auto text-center py-4">
         <p className="text-[11px] font-mono text-slate-400">
-          © 2026 {event.institution} · 모의 크라우드펀딩 평가 시스템
+          © 2026 {displayCourse.institution} · 모의 크라우드펀딩 평가 시스템 V2
         </p>
       </footer>
     </div>

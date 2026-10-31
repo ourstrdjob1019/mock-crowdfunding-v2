@@ -3,28 +3,34 @@
 import React from "react";
 import { useApp } from "@/context/AppContext";
 import { Project } from "@/types";
-import { Award, Eye, CheckCircle2, Users, Coins } from "lucide-react";
+import { Award, Eye, CheckCircle2, Users, Edit3, Lock } from "lucide-react";
 
 interface TeamProjectManagerProps {
   onSelectProject?: (project: Project) => void;
   openCreateProject?: () => void;
+  onEditProject?: (project: Project) => void;
 }
 
 export const TeamProjectManager: React.FC<TeamProjectManagerProps> = ({
   onSelectProject,
   openCreateProject,
+  onEditProject,
 }) => {
-  const { currentUser, projects } = useApp();
+  const { currentUser, projects, event, canStudentEditProject } = useApp();
 
   if (!currentUser) return null;
 
-  // 내 팀 프로젝트 찾기 (isUserProject이거나 currentUser.teamId 일치 또는 authorId 일치)
+  // 내 팀 프로젝트 찾기 (isUserProject이거나 currentUser.teamId 일치 또는 팀명 일치 또는 authorId 일치)
   const myProj = projects.find(
     (p) =>
       p.isUserProject ||
       (currentUser.teamId && currentUser.teamId === p.teamId) ||
+      (currentUser.teamName && p.teamName && currentUser.teamName.trim() === p.teamName.trim()) ||
       p.authorId === currentUser.id
   );
+
+  const canCreate = currentUser.role === "ADMIN" || Boolean(event.isRegistrationOpen);
+  const canEdit = currentUser.role === "ADMIN" || canStudentEditProject;
 
   if (!myProj) {
     return (
@@ -34,9 +40,11 @@ export const TeamProjectManager: React.FC<TeamProjectManagerProps> = ({
         </div>
         <h2 className="font-bold text-slate-800 text-lg">아직 출품 등록된 팀 프로젝트가 없습니다</h2>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
-          데모데이에 출품할 우리 팀의 혁신 아이템을 등록하고 동료와 심사위원들의 모의투자를 받아보세요.
+          {canCreate
+            ? "데모데이에 출품할 우리 팀의 혁신 아이템을 등록하고 동료와 심사위원들의 모의투자를 받아보세요."
+            : "현재 출품 등록 시간이 마감되었거나 열리지 않았습니다. 관리자에게 문의해 주세요."}
         </p>
-        {openCreateProject && (
+        {openCreateProject && canCreate && (
           <button
             type="button"
             onClick={openCreateProject}
@@ -67,16 +75,34 @@ export const TeamProjectManager: React.FC<TeamProjectManagerProps> = ({
           </h1>
         </div>
 
-        {onSelectProject && (
-          <button
-            type="button"
-            onClick={() => onSelectProject(myProj)}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition flex items-center gap-1.5 self-start cursor-pointer shadow-xs"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>투자자 뷰로 확인</span>
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {canEdit && onEditProject ? (
+            <button
+              type="button"
+              onClick={() => onEditProject(myProj)}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>출품작 수정하기</span>
+            </button>
+          ) : (
+            <span className="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 font-semibold text-xs flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <span>{event.isFundingOpen ? "펀딩 진행 중 (수정 잠금)" : "출품 마감 (수정 잠금)"}</span>
+            </span>
+          )}
+
+          {onSelectProject && (
+            <button
+              type="button"
+              onClick={() => onSelectProject(myProj)}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>상세페이지 확인</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 3 KPI Stats for My Project */}

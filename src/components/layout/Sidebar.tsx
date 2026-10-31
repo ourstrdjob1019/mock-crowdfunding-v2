@@ -214,17 +214,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* 4. CTA Button: Glowing primary blue "+ 새 프로젝트 출품 등록" */}
         {openCreateProject && (
-          <button
-            type="button"
-            onClick={() => {
-              openCreateProject();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold text-xs md:text-sm shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/35 transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer active:scale-98"
-          >
-            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" />
-            <span>새 프로젝트 출품 등록</span>
-          </button>
+          currentUser.role === "ADMIN" || event.isRegistrationOpen ? (
+            <button
+              type="button"
+              onClick={() => {
+                openCreateProject();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold text-xs md:text-sm shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/35 transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer active:scale-98"
+            >
+              <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" />
+              <span>새 프로젝트 출품 등록</span>
+            </button>
+          ) : (
+            <div className="w-full py-2.5 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 font-semibold text-xs text-center">
+              🔒 출품 등록이 마감되었습니다
+            </div>
+          )
         )}
       </div>
 

@@ -3,7 +3,7 @@ export type EventStage = "PREPARING" | "REGISTRATION" | "FUNDING_OPEN" | "FUNDIN
 export interface Event {
   id: string;
   name: string;
-  institution: string; // 학교명
+  institution: string; // 학교/기관명
   session: string; // 회차 (예: 2026 가을학기)
   eventDate: string;
   baseCredit: number; // 10,000
@@ -11,6 +11,10 @@ export interface Event {
   maxInvestment: number; // 5,000
   currentStage: EventStage;
   isRankingPublic: boolean;
+  inviteCode?: string; // 과정별 입장/가입 초대코드 (예: "2026", "1001")
+  isRegistrationOpen?: boolean; // 출품 등록 및 수정 허용 토글 스위치 (ON/OFF)
+  isFundingOpen?: boolean; // 펀딩(모의투자) 진행 중 토글 스위치 (ON/OFF)
+  rankScoreTeamCount?: number; // 10점 만점 등수 환산 기준 팀 수 (예: 5, 10, 20)
   creditUnitForScore?: number; // 환산 기준 크레딧 (예: 1000 CR)
   scorePerCreditUnit?: number; // 환산 점수 (예: 10 점)
 }

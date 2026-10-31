@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 
 function MainDashboard() {
-  const { event, projects, currentUser, setCurrentUser, users, logout } = useApp();
+  const { event, events, selectCourse, canStudentEditProject, projects, currentUser, logout } = useApp();
   const [currentTab, setCurrentTab] = useState<"gallery" | "my-investments" | "team-project" | "admin">("gallery");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -52,16 +52,6 @@ function MainDashboard() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3200);
   };
-
-  const stagesMap: Record<string, { code: string; title: string }> = {
-    PREPARING: { code: "01", title: "준비 중" },
-    REGISTRATION: { code: "02", title: "출품 등록" },
-    FUNDING_OPEN: { code: "03", title: "펀딩 진행 중" },
-    FUNDING_CLOSED: { code: "04", title: "펀딩 마감" },
-    RANKING_PUBLISHED: { code: "05", title: "랭킹 공개" },
-  };
-
-  const currentStageInfo = stagesMap[event.currentStage] || { code: "03", title: "펀딩 진행 중" };
 
   // Filtered & Sorted Projects
   const filteredProjects = useMemo(() => {
@@ -115,13 +105,48 @@ function MainDashboard() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
               </span>
-              <span className="hidden xs:inline">레디스타트업 · LIVE</span>
-              <span className="xs:hidden">LIVE</span>
+              <span className="hidden xs:inline">초대코드: {event.inviteCode || "2026"}</span>
+              <span className="xs:hidden">#{event.inviteCode || "2026"}</span>
             </div>
 
-            <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200">
-              <span className="text-slate-400">현재 단계:</span>
-              <span className="font-semibold text-slate-900">{currentStageInfo.code}. {currentStageInfo.title}</span>
+            {currentUser?.role === "ADMIN" && events.length > 0 ? (
+              <select
+                value={event.id}
+                onChange={(e) => selectCourse(e.target.value)}
+                aria-label="운영 과정 선택"
+                className="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-xs font-bold border border-slate-700 cursor-pointer max-w-[180px] sm:max-w-[260px] truncate"
+              >
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    [{ev.inviteCode || "2026"}] {ev.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 truncate max-w-[240px]">
+                <span className="truncate">{event.name}</span>
+              </div>
+            )}
+
+            <div className="hidden lg:flex items-center gap-1.5">
+              <span
+                className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                  event.isRegistrationOpen
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}
+              >
+                출품등록 {event.isRegistrationOpen ? "ON" : "OFF"}
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                  event.isFundingOpen
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                }`}
+              >
+                펀딩진행 {event.isFundingOpen ? "ON" : "OFF"}
+              </span>
             </div>
           </div>
 
@@ -352,7 +377,7 @@ function MainDashboard() {
                         ? "검색어를 다시 확인하시거나 필터를 초기화해 보세요."
                         : "첫 번째 혁신 스타트업 프로젝트를 직접 출품 등록해 보세요!"}
                     </p>
-                    {!searchQuery && (
+                    {!searchQuery && (currentUser?.role === "ADMIN" || canStudentEditProject) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -384,6 +409,10 @@ function MainDashboard() {
                 onSelectProject={(p) => setSelectedProject(p)}
                 openCreateProject={() => {
                   setEditingProject(null);
+                  setIsCreateModalOpen(true);
+                }}
+                onEditProject={(p) => {
+                  setEditingProject(p);
                   setIsCreateModalOpen(true);
                 }}
               />
@@ -430,6 +459,14 @@ function MainDashboard() {
         <button
           type="button"
           onClick={() => {
+            if (currentUser?.role !== "ADMIN" && !canStudentEditProject) {
+              showToast(
+                event.isFundingOpen
+                  ? "🔒 펀딩 진행 중에는 작품을 등록하거나 수정할 수 없습니다."
+                  : "🔒 현재 출품 등록 기간이 아닙니다."
+              );
+              return;
+            }
             setEditingProject(null);
             setIsCreateModalOpen(true);
           }}

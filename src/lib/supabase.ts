@@ -22,7 +22,7 @@ function sanitizeExt(fileName: string, fallback: string = "bin"): string {
 }
 
 /**
- * 썸네일 이미지를 Supabase Storage (project-thumbnails)에 업로드
+ * 썸네일 이미지를 Supabase Storage (v2-project-thumbnails)에 업로드
  */
 export async function uploadThumbnail(file: File): Promise<{ url: string | null; error: string | null }> {
   if (!supabase) {
@@ -40,7 +40,7 @@ export async function uploadThumbnail(file: File): Promise<{ url: string | null;
     const filePath = `thumbnails/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("project-thumbnails")
+      .from("v2-project-thumbnails")
       .upload(filePath, file, {
         cacheControl: "3600",
         upsert: true,
@@ -52,7 +52,7 @@ export async function uploadThumbnail(file: File): Promise<{ url: string | null;
     }
 
     const { data } = supabase.storage
-      .from("project-thumbnails")
+      .from("v2-project-thumbnails")
       .getPublicUrl(filePath);
 
     return { url: data.publicUrl, error: null };
@@ -63,7 +63,7 @@ export async function uploadThumbnail(file: File): Promise<{ url: string | null;
 }
 
 /**
- * 랜딩페이지 파일(이미지/PDF/HTML/동영상)을 Supabase Storage (landing-files)에 업로드
+ * 랜딩페이지 파일(이미지/PDF/HTML/동영상)을 Supabase Storage (v2-landing-files)에 업로드
  */
 export async function uploadLandingFile(file: File): Promise<{ url: string | null; error: string | null }> {
   if (!supabase) {
@@ -89,7 +89,7 @@ export async function uploadLandingFile(file: File): Promise<{ url: string | nul
                     /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
 
     // 1차 업로드 시도:
-    // Supabase landing-files 버킷의 allowed_mime_types에 비디오 타입이 누락되어 있을 수 있으므로,
+    // Supabase v2-landing-files 버킷의 allowed_mime_types에 비디오 타입이 누락되어 있을 수 있으므로,
     // 비디오 파일인 경우 브라우저 FormData가 video/mp4를 달아 415 오류를 유발하지 않도록 
     // 버킷 허용 MIME(text/html)으로 래핑한 Blob을 전달합니다.
     const initialPayload: Blob | File = isVideo
@@ -98,7 +98,7 @@ export async function uploadLandingFile(file: File): Promise<{ url: string | nul
     const initialContentType = isVideo ? "text/html" : (file.type || undefined);
 
     let uploadRes = await supabase.storage
-      .from("landing-files")
+      .from("v2-landing-files")
       .upload(filePath, initialPayload, {
         cacheControl: "3600",
         upsert: true,
@@ -124,7 +124,7 @@ export async function uploadLandingFile(file: File): Promise<{ url: string | nul
       console.warn("Storage MIME restriction detected, retrying with fallback contentType...", uploadRes.error);
       const fallbackBlob = new Blob([file], { type: "text/html" });
       uploadRes = await supabase.storage
-        .from("landing-files")
+        .from("v2-landing-files")
         .upload(filePath, fallbackBlob, {
           cacheControl: "3600",
           upsert: true,
@@ -146,7 +146,7 @@ export async function uploadLandingFile(file: File): Promise<{ url: string | nul
     }
 
     const { data } = supabase.storage
-      .from("landing-files")
+      .from("v2-landing-files")
       .getPublicUrl(filePath);
 
     return { url: data.publicUrl, error: null };

@@ -333,11 +333,11 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         continue;
       }
 
-      // 3) Supabase DB 실시간 조회 (방금 가입한 학생 지원)
+      // 3) Supabase V2 DB 실시간 조회 (방금 가입한 학생 지원)
       if (supabase) {
         try {
           const { data: dbUser } = await supabase
-            .from("users")
+            .from("v2_users")
             .select("*")
             .or(`email.ilike.${inputVal},student_number.eq.${inputVal},id.eq.${inputVal}`)
             .maybeSingle();
@@ -761,7 +761,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         }
       } else {
         const res = await createProject({
-          eventId: "evt-2026-fall-01",
+          eventId: "evt-2026-v2-01",
           teamId: currentUser?.teamId || `team-${Date.now()}`,
           teamName: teamName.trim() || `${currentUser?.name || "학생"} 팀`,
           teamNumber: 1,

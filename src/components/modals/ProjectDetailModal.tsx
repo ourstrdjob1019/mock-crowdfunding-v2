@@ -57,6 +57,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
     currentUser,
     remainingCredits,
     isMutating,
+    canStudentEditProject,
     getUserInvestmentForProject,
     invest,
     addComment,
@@ -99,6 +100,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
   const isOwned = Boolean(
     project.isUserProject ||
       (currentUser.teamId && currentUser.teamId === project.teamId) ||
+      (currentUser.teamName && project.teamName && currentUser.teamName.trim() === project.teamName.trim()) ||
       currentUser.id === project.authorId ||
       (currentUser.email && project.authorEmail?.toLowerCase() === currentUser.email.toLowerCase()) ||
       (project.teamMemberIds && (
@@ -113,7 +115,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
       ))
   );
 
-  const canEdit = isOwned || currentUser.role === "ADMIN";
+  const canEdit = currentUser.role === "ADMIN" || (isOwned && canStudentEditProject);
+  const isEditLockedForOwner = isOwned && currentUser.role !== "ADMIN" && !canStudentEditProject;
   const targetCredits = project.targetCredits || 20000;
   const progressPct = Math.round((project.totalCredits / targetCredits) * 100);
 
@@ -216,8 +219,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
       return;
     }
 
-    if (event.currentStage !== "FUNDING_OPEN") {
-      showToast("현재 단계에서는 모의투자를 진행할 수 없습니다.");
+    if (!event.isFundingOpen) {
+      showToast("현재 모의투자(펀딩) 진행 시간이 아닙니다.");
       return;
     }
 
@@ -323,6 +326,15 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {isEditLockedForOwner && (
+              <span
+                title="펀딩 진행 중이거나 출품 마감 상태에서는 수정할 수 없습니다."
+                className="px-2.5 py-1 rounded-lg bg-slate-200/80 text-slate-600 text-[11px] font-semibold flex items-center gap-1 mr-1"
+              >
+                <Lock className="w-3 h-3 text-slate-500" />
+                <span>수정 잠금 (펀딩 진행/마감)</span>
+              </span>
+            )}
             {canEdit && (
               <div className="flex items-center gap-1 mr-1">
                 {onOpenEdit && (
@@ -806,7 +818,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                     disabled={
                       isInvestingLocal ||
                       isMutating ||
-                      event.currentStage !== "FUNDING_OPEN" ||
+                      !event.isFundingOpen ||
                       availableCreditsForProject < (parseInt(investmentInputVal, 10) || 0) ||
                       (parseInt(investmentInputVal, 10) || 0) < 2000 ||
                       (parseInt(investmentInputVal, 10) || 0) > 5000
@@ -818,6 +830,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                     <span>
                       {isInvestingLocal || isMutating
                         ? "서버에 투자 내역 저장 중..."
+                        : !event.isFundingOpen
+                        ? "현재 펀딩 진행 시간이 아닙니다"
                         : `${(parseInt(investmentInputVal, 10) || 0).toLocaleString()} CR ${existingInv ? "투자 금액 변경하기" : "모의투자 참여하기"}`}
                     </span>
                   </button>
