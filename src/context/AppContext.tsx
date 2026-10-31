@@ -920,7 +920,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    return runWithMutationLock(
+    return runWithMutationLock<{ success: boolean; message: string }>(
       "프로젝트를 서버에서 삭제하고 있습니다...",
       async () => {
         await dbDeleteProject(projectId, targetProject.teamId);
@@ -1079,7 +1079,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const targetInv = allInvestments.find((inv) => inv.id === investmentId);
     if (!targetInv) return { success: false, message: "투자 내역을 찾을 수 없습니다." };
 
-    return runWithMutationLock(
+    return runWithMutationLock<{ success: boolean; message: string }>(
       "투자 취소 및 크레딧 환불을 처리하고 있습니다...",
       async () => {
         let newProjectTotal = 0;
