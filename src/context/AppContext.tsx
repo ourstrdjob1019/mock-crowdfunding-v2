@@ -104,6 +104,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isMutating, setIsMutating] = useState<boolean>(false);
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
   const mutationLockRef = useRef<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
+  const pendingSyncRef = useRef<boolean>(false);
 
   // 현재 선택/접속된 과정(Event)
   const event: Event = useMemo(() => {
@@ -171,8 +173,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Supabase 실시간 데이터 로딩 함수 (오직 Supabase V2 DB 기준)
+  // Supabase 실시간 데이터 로딩 함수 (200명 동시 접속 시 중복 호출 방지 뮤텍스 적용)
   const loadData = async (silent = false) => {
+    if (isFetchingRef.current) {
+      pendingSyncRef.current = true;
+      return;
+    }
+    isFetchingRef.current = true;
     if (!silent) setIsLoading(true);
 
     try {
@@ -232,31 +239,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.warn("Supabase fetch failed:", err);
     } finally {
+      isFetchingRef.current = false;
       if (!silent) setIsLoading(false);
+      if (pendingSyncRef.current) {
+        pendingSyncRef.current = false;
+        setTimeout(() => loadData(true), 600);
+      }
     }
   };
 
   useEffect(() => {
     loadData(false);
 
-    // 1. 탭 활성화(포커스) 시 Supabase 최신 데이터 즉시 동기화
+    // 1. 탭 활성화(포커스/가시성 복귀) 시 Supabase 최신 데이터 즉시 동기화
     const handleFocus = () => {
-      loadData(true);
+      if (document.visibilityState === "visible") {
+        loadData(true);
+      }
     };
     window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
 
-    // 2. 10초 주기 백그라운드 무중단 폴링 (모바일 네트워크/방화벽 환경에서도 100% 실시간 동기화 보장)
+    // 2. 백그라운드 폴링 (200명 동시 접속 부하 분산을 위해 12~16초 랜덤 지터 적용 + 비활성 탭 스킵)
+    const jitterMs = 12000 + Math.floor(Math.random() * 4000);
     const pollInterval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       loadData(true);
-    }, 10000);
+    }, jitterMs);
 
-    // 3. Supabase Realtime WebSocket 구독 (투자, 프로젝트, 행사 단계 변경 시 즉시 반영)
+    // 3. Supabase Realtime WebSocket 구독 (200명 동시 투자 시 Thundering Herd 방지를 위한 1.2~2.5초 랜덤 지터 디바운싱)
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const triggerRealtimeSync = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
+      const realtimeJitter = 1200 + Math.floor(Math.random() * 1300);
       debounceTimer = setTimeout(() => {
-        loadData(true);
-      }, 400);
+        if (typeof document === "undefined" || document.visibilityState === "visible") {
+          loadData(true);
+        }
+      }, realtimeJitter);
     };
 
     const channel = supabase
@@ -271,6 +293,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
       clearInterval(pollInterval);
       if (debounceTimer) clearTimeout(debounceTimer);
       if (channel && supabase) {
@@ -632,10 +655,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { success: false, count: 0, message: "생성할 계정 정보가 없습니다." };
     }
 
-    return runWithMutationLock(
+    return runWithMutationLock<{ success: boolean; count: number; message: string }>(
       `${newUsersList.length}개의 사전 배정 계정을 DB에 생성하고 있습니다...`,
       async () => {
-        const res = await dbBulkInsertUsers(newUsersList);
+        // 다른 과정(event_id)에서 이미 사용 중인 아이디가 있으면 과정 초대코드를 앞에 붙여 충돌 원천 방지
+        const safeUsersList = newUsersList.map((u) => {
+          const lower = u.email.toLowerCase().trim();
+          const conflictOtherCourse = allUsers.find(
+            (existing) =>
+              existing.email.toLowerCase() === lower &&
+              existing.eventId &&
+              u.eventId &&
+              existing.eventId !== u.eventId
+          );
+          if (conflictOtherCourse) {
+            const codePrefix = (event.inviteCode || "v2").trim().toLowerCase();
+            return {
+              ...u,
+              email: `${codePrefix}_${lower}`,
+            };
+          }
+          return u;
+        });
+
+        const res = await dbBulkInsertUsers(safeUsersList);
         if (!res.success) {
           return {
             success: false,
@@ -644,17 +687,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           };
         }
 
-        const newEmails = new Set(newUsersList.map((u) => u.email.toLowerCase()));
+        const newEmails = new Set(safeUsersList.map((u) => u.email.toLowerCase()));
         const merged = [
           ...allUsers.filter((u) => !newEmails.has(u.email.toLowerCase())),
-          ...newUsersList,
+          ...safeUsersList,
         ];
         setUsers(merged);
 
         return {
           success: true,
-          count: newUsersList.length,
-          message: `총 ${newUsersList.length}개의 계정이 성공적으로 생성되었습니다!`,
+          count: safeUsersList.length,
+          message: `총 ${safeUsersList.length}개의 계정이 성공적으로 생성되었습니다!`,
         };
       },
       { success: false, count: 0, message: "현재 서버와 데이터 통신 중입니다. 잠시만 기다려 주세요." }
@@ -783,8 +826,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return runWithMutationLock(
       "새 프로젝트 출품 정보를 서버에 등록하고 있습니다...",
       async () => {
-        const newId = `proj-${Date.now().toString().slice(-6)}`;
-        const teamId = data.teamId || currentUser.teamId || `team-${Date.now().toString().slice(-6)}`;
+        const randSuffix = Math.random().toString(36).slice(2, 6);
+        const newId = `proj-${Date.now().toString().slice(-6)}-${randSuffix}`;
+        const teamId = data.teamId || currentUser.teamId || `team-${Date.now().toString().slice(-6)}-${randSuffix}`;
         const newProject: Project = {
           ...data,
           id: newId,

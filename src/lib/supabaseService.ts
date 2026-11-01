@@ -361,14 +361,6 @@ export async function fetchAllFromSupabase(): Promise<{
       }
     }
 
-    if (duplicateIdsToDelete.length > 0 && supabase) {
-      supabase
-        .from("v2_investments")
-        .delete()
-        .in("id", duplicateIdsToDelete)
-        .then(() => {});
-    }
-
     const investments = Array.from(dedupMap.values());
 
     const projects = projectsLoaded
