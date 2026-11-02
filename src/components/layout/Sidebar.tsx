@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Coins className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent">
+              <div className="font-display text-xl font-normal tracking-tight bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent">
                 레디스타트업
               </div>
               <div className="text-[11px] font-medium text-slate-500 tracking-wide">
