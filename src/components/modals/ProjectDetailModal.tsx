@@ -501,7 +501,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                               item.url?.toLowerCase().endsWith(".htm")
                           );
                           const openInNewTabHref = isUploadedHtml
-                            ? `/view?id=${encodeURIComponent(project.id)}`
+                            ? `/view?id=${encodeURIComponent(project.id)}&itemId=${encodeURIComponent(item.id || "")}&url=${encodeURIComponent(item.url || "")}`
                             : formatWebUrl(item.url);
 
                           return (

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { EventStage, User, UserRole } from "@/types";
+import { EventStage, Project, User, UserRole } from "@/types";
 import {
   Download,
   Tv,
@@ -23,14 +23,19 @@ import {
   Sparkles,
   UserPlus,
   FileSpreadsheet,
+  Edit3,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface AdminDashboardProps {
   openProjectorRanking: () => void;
+  onEditProject?: (project: Project) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRanking }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  openProjectorRanking,
+  onEditProject,
+}) => {
   const {
     event,
     events,
@@ -42,6 +47,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
     setStage,
     projects,
     toggleProjectVisibility,
+    deleteProject,
     users,
     bulkCreateAccounts,
     deleteUserAccount,
@@ -967,7 +973,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
                       <th className="py-3 px-4 text-right font-mono font-bold text-blue-600">
                         토큰 환산 점수
                       </th>
-                      <th className="py-3 px-4 text-center">노출 여부</th>
+                      <th className="py-3 px-4 text-center">노출 / 작품 관리</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1030,25 +1036,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ openProjectorRan
                             <span className="text-xs font-sans text-slate-400">점</span>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (
-                                  !team.isHidden &&
-                                  !confirm(`[${team.title}] 프로젝트를 갤러리에서 숨김 처리하시겠습니까?`)
-                                ) {
-                                  return;
-                                }
-                                toggleProjectVisibility(team.id);
-                              }}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition ${
-                                team.isHidden
-                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              }`}
-                            >
-                              {team.isHidden ? "숨김 상태" : "정상 노출"}
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              {onEditProject && (
+                                <button
+                                  type="button"
+                                  onClick={() => onEditProject(team)}
+                                  className="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold cursor-pointer transition inline-flex items-center gap-1"
+                                  title="프로젝트 수정 및 파일 업로드"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>수정/파일</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (
+                                    !team.isHidden &&
+                                    !confirm(`[${team.title}] 프로젝트를 갤러리에서 숨김 처리하시겠습니까?`)
+                                  ) {
+                                    return;
+                                  }
+                                  toggleProjectVisibility(team.id);
+                                }}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition ${
+                                  team.isHidden
+                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                {team.isHidden ? "숨김" : "노출"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (confirm(`정말 [${team.title}] 출품작을 삭제하시겠습니까?`)) {
+                                    const res = await deleteProject(team.id);
+                                    showToast(res.message);
+                                  }
+                                }}
+                                className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 cursor-pointer transition"
+                                title="출품작 삭제"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

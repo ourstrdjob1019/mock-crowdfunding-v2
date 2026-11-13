@@ -84,23 +84,28 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     VIDEO: 4,
   });
 
-  // 미디어별 세부 데이터
-  // A. 이미지
+  // 미디어별 세부 데이터 (4종 모두 다중 파일/URL 등록 지원)
+  // A. 이미지 (다중)
   const [mediaImages, setMediaImages] = useState<string[]>([]);
   const [mediaImageUrl, setMediaImageUrl] = useState<string>("");
 
-  // B. PDF
-  const [mediaPdfUrl, setMediaPdfUrl] = useState<string>("");
+  // B. PDF (다중)
+  const [mediaPdfList, setMediaPdfList] = useState<
+    { id: string; url: string; fileName: string }[]
+  >([]);
+  const [mediaPdfUrlInput, setMediaPdfUrlInput] = useState<string>("");
 
-  // C. HTML
-  const [mediaHtmlUrl, setMediaHtmlUrl] = useState<string>("");
-  const [mediaHtmlContent, setMediaHtmlContent] = useState<string>("");
-  const [mediaHtmlFileName, setMediaHtmlFileName] = useState<string>("");
+  // C. HTML (다중)
+  const [mediaHtmlList, setMediaHtmlList] = useState<
+    { id: string; url: string; htmlContent?: string; fileName: string }[]
+  >([]);
+  const [mediaHtmlUrlInput, setMediaHtmlUrlInput] = useState<string>("");
 
-  // D. 동영상
-  const [mediaVideoUrl, setMediaVideoUrl] = useState<string>("");
-  const [mediaVideoType, setMediaVideoType] = useState<"FILE" | "URL">("FILE");
-  const [mediaVideoFileName, setMediaVideoFileName] = useState<string>("");
+  // D. 동영상 (다중)
+  const [mediaVideoList, setMediaVideoList] = useState<
+    { id: string; url: string; videoType: "FILE" | "URL"; fileName: string }[]
+  >([]);
+  const [mediaVideoUrlInput, setMediaVideoUrlInput] = useState<string>("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -157,57 +162,100 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         setMemberInputs([""]);
       }
 
-      // 미디어 아이템 복원
+      // 미디어 아이템 복원 (다중 아이템 누적 복원)
       if (editProject.mediaItems && editProject.mediaItems.length > 0) {
         const newEnabled = { IMAGE: false, PDF: false, HTML: false, VIDEO: false };
         const newPriorities = { IMAGE: 1, PDF: 2, HTML: 3, VIDEO: 4 };
+        const restoredImages: string[] = [];
+        const restoredPdfs: { id: string; url: string; fileName: string }[] = [];
+        const restoredHtmls: { id: string; url: string; htmlContent?: string; fileName: string }[] = [];
+        const restoredVideos: { id: string; url: string; videoType: "FILE" | "URL"; fileName: string }[] = [];
 
-        editProject.mediaItems.forEach(item => {
+        editProject.mediaItems.forEach((item, idx) => {
           if (item.type in newEnabled) {
             newEnabled[item.type] = true;
             newPriorities[item.type] = item.priority;
 
             if (item.type === "IMAGE") {
-              setMediaImages(item.images || [item.url].filter(Boolean));
-              setMediaImageUrl(item.url || "");
+              const imgs = item.images && item.images.length > 0 ? item.images : [item.url].filter(Boolean);
+              imgs.forEach((u) => {
+                if (u && !restoredImages.includes(u)) restoredImages.push(u);
+              });
             } else if (item.type === "PDF") {
-              setMediaPdfUrl(item.url || "");
+              if (item.url) {
+                restoredPdfs.push({
+                  id: item.id || `media-pdf-${idx}`,
+                  url: item.url,
+                  fileName: item.fileName || item.title || `PDF 문서 #${restoredPdfs.length + 1}`,
+                });
+              }
             } else if (item.type === "HTML") {
-              setMediaHtmlUrl(item.url || "");
-              setMediaHtmlContent(item.htmlContent || "");
-              setMediaHtmlFileName(item.fileName || "");
+              if (item.url || item.htmlContent) {
+                restoredHtmls.push({
+                  id: item.id || `media-html-${idx}`,
+                  url: item.url || "",
+                  htmlContent: item.htmlContent || "",
+                  fileName: item.fileName || item.title || `HTML 시연 #${restoredHtmls.length + 1}`,
+                });
+              }
             } else if (item.type === "VIDEO") {
-              setMediaVideoUrl(item.url || "");
-              setMediaVideoType(item.videoType || "FILE");
-              setMediaVideoFileName(item.fileName || "");
+              if (item.url) {
+                restoredVideos.push({
+                  id: item.id || `media-video-${idx}`,
+                  url: item.url,
+                  videoType: item.videoType || "FILE",
+                  fileName: item.fileName || item.title || `소개 영상 #${restoredVideos.length + 1}`,
+                });
+              }
             }
           }
         });
 
         setEnabledMedia(newEnabled);
         setPriorities(newPriorities);
+        setMediaImages(restoredImages);
+        setMediaImageUrl("");
+        setMediaPdfList(restoredPdfs);
+        setMediaPdfUrlInput("");
+        setMediaHtmlList(restoredHtmls);
+        setMediaHtmlUrlInput("");
+        setMediaVideoList(restoredVideos);
+        setMediaVideoUrlInput("");
       } else {
         // 기존 단일 landingFormat 기반 마이그레이션 복원
         const fmt = editProject.landingFormat;
         const isPdf = fmt === "PDF";
         const isHtml = fmt === "HTML" || fmt === "WEB";
-        const isImg = fmt === "IMAGE" || (!isPdf && !isHtml);
+        const isVideo = fmt === "VIDEO";
+        const isImg = fmt === "IMAGE" || (!isPdf && !isHtml && !isVideo);
 
         setEnabledMedia({
           IMAGE: isImg,
           PDF: isPdf,
           HTML: isHtml,
-          VIDEO: false,
+          VIDEO: isVideo,
         });
 
-        if (isImg) {
-          setMediaImages(editProject.landingImages || [editProject.landingUrl].filter(Boolean));
-          setMediaImageUrl(editProject.landingUrl || "");
-        } else if (isPdf) {
-          setMediaPdfUrl(editProject.landingUrl || "");
-        } else if (isHtml) {
-          setMediaHtmlUrl(editProject.landingUrl || "");
-        }
+        setMediaImages(isImg ? (editProject.landingImages || [editProject.landingUrl].filter(Boolean)) : []);
+        setMediaImageUrl("");
+        setMediaPdfList(
+          isPdf && editProject.landingUrl
+            ? [{ id: "media-pdf-0", url: editProject.landingUrl, fileName: "IR 피치덱 PDF" }]
+            : []
+        );
+        setMediaPdfUrlInput("");
+        setMediaHtmlList(
+          isHtml && editProject.landingUrl
+            ? [{ id: "media-html-0", url: editProject.landingUrl, fileName: "시연 웹페이지" }]
+            : []
+        );
+        setMediaHtmlUrlInput("");
+        setMediaVideoList(
+          isVideo && editProject.landingUrl
+            ? [{ id: "media-video-0", url: editProject.landingUrl, videoType: "FILE", fileName: "소개 영상" }]
+            : []
+        );
+        setMediaVideoUrlInput("");
       }
     } else {
       // 신규 등록 기본값
@@ -242,13 +290,12 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       });
       setMediaImages([]);
       setMediaImageUrl("");
-      setMediaPdfUrl("");
-      setMediaHtmlUrl("");
-      setMediaHtmlContent("");
-      setMediaHtmlFileName("");
-      setMediaVideoUrl("");
-      setMediaVideoType("FILE");
-      setMediaVideoFileName("");
+      setMediaPdfList([]);
+      setMediaPdfUrlInput("");
+      setMediaHtmlList([]);
+      setMediaHtmlUrlInput("");
+      setMediaVideoList([]);
+      setMediaVideoUrlInput("");
     }
     setErrorMessage("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,12 +320,17 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         setTimeout(() => setUploadStatus(""), 2000);
       } else {
         setErrorMessage(res.error || "썸네일 업로드에 실패했습니다.");
+        setUploadStatus("");
       }
     } catch (err: any) {
       console.warn("Thumbnail upload warning:", err);
       setErrorMessage(`썸네일 업로드 오류: ${err.message || err}`);
+      setUploadStatus("");
     } finally {
       setIsUploading(false);
+      try {
+        e.target.value = "";
+      } catch (_) {}
     }
   };
 
@@ -496,128 +548,195 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     setActiveSearchIdx(null);
   };
 
-  // 3. 미디어 파일 업로드 핸들러들
+  // 3. 미디어 파일 업로드 핸들러들 (4종 모두 다중 업로드 지원)
   // A. 이미지 다중 업로드 (Storage 안전 업로드)
   const handleDetailImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setUploadStatus("상세 이미지 Storage 서버 업로드 중...");
+    setEnabledMedia((prev) => ({ ...prev, IMAGE: true }));
+    setUploadStatus(`상세 이미지 ${files.length}장 Storage 서버 업로드 중...`);
     setIsUploading(true);
     setErrorMessage("");
 
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
+      const uploadedUrls: string[] = [];
+      const errors: string[] = [];
+
+      for (const file of Array.from(files)) {
         const res = await uploadLandingFile(file);
-        return res.url;
-      });
+        if (res.url) {
+          uploadedUrls.push(res.url);
+        } else if (res.error) {
+          errors.push(`${file.name}: ${res.error}`);
+        }
+      }
 
-      const uploadedUrls = await Promise.all(uploadPromises);
-      const validUrls = uploadedUrls.filter((url): url is string => Boolean(url));
-
-      if (validUrls.length > 0) {
-        setMediaImages(prev => [...prev, ...validUrls]);
-        setUploadStatus(`✅ 이미지 ${validUrls.length}장 업로드 완료!`);
-        setTimeout(() => setUploadStatus(""), 2000);
-      } else {
-        setErrorMessage("이미지 업로드에 실패했습니다. 파일 용량(150MB 이하)을 확인해 주세요.");
+      if (uploadedUrls.length > 0) {
+        setMediaImages((prev) => [...prev, ...uploadedUrls]);
+        setUploadStatus(`✅ 이미지 ${uploadedUrls.length}장 업로드 완료!`);
+        setTimeout(() => setUploadStatus(""), 2200);
+      }
+      if (errors.length > 0) {
+        setErrorMessage(errors.join(" / "));
+        if (uploadedUrls.length === 0) setUploadStatus("");
       }
     } catch (err: any) {
       console.warn("Detail images upload warning:", err);
       setErrorMessage(`이미지 업로드 오류: ${err.message || err}`);
+      setUploadStatus("");
     } finally {
       setIsUploading(false);
+      try {
+        e.target.value = "";
+      } catch (_) {}
     }
   };
 
-  // B. PDF 업로드 (Storage 안전 업로드)
+  // B. PDF 다중 업로드 (Storage 안전 업로드)
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    setUploadStatus("PDF 문서 Storage 서버 업로드 중...");
+    setEnabledMedia((prev) => ({ ...prev, PDF: true }));
+    setUploadStatus(`PDF 문서 ${files.length}개 Storage 서버 업로드 중...`);
     setIsUploading(true);
     setErrorMessage("");
 
     try {
-      const res = await uploadLandingFile(file);
-      if (res.url) {
-        setMediaPdfUrl(res.url);
-        setUploadStatus("✅ PDF 문서 업로드 완료!");
-        setTimeout(() => setUploadStatus(""), 2000);
-      } else {
-        setErrorMessage(res.error || "PDF 업로드에 실패했습니다.");
+      const addedItems: { id: string; url: string; fileName: string }[] = [];
+      const errors: string[] = [];
+
+      for (const file of Array.from(files)) {
+        const res = await uploadLandingFile(file);
+        if (res.url) {
+          addedItems.push({
+            id: `media-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            url: res.url,
+            fileName: file.name,
+          });
+        } else {
+          errors.push(`${file.name}: ${res.error || "업로드 실패"}`);
+        }
+      }
+
+      if (addedItems.length > 0) {
+        setMediaPdfList((prev) => [...prev, ...addedItems]);
+        setUploadStatus(`✅ PDF 문서 ${addedItems.length}개 업로드 완료!`);
+        setTimeout(() => setUploadStatus(""), 2200);
+      }
+      if (errors.length > 0) {
+        setErrorMessage(errors.join(" / "));
+        if (addedItems.length === 0) setUploadStatus("");
       }
     } catch (err: any) {
       console.warn("PDF upload warning:", err);
       setErrorMessage(`PDF 업로드 오류: ${err.message || err}`);
+      setUploadStatus("");
     } finally {
       setIsUploading(false);
+      try {
+        e.target.value = "";
+      } catch (_) {}
     }
   };
 
-  // C. HTML 파일 업로드
+  // C. HTML 파일 다중 업로드
   const handleHtmlFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    setMediaHtmlFileName(file.name);
-    setUploadStatus("HTML 파일 읽기 및 Storage 서버 업로드 중...");
+    setEnabledMedia((prev) => ({ ...prev, HTML: true }));
+    setUploadStatus(`HTML 파일 ${files.length}개 읽기 및 Storage 서버 업로드 중...`);
     setIsUploading(true);
     setErrorMessage("");
 
-    // HTML 내용 텍스트 읽기
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setMediaHtmlContent(reader.result);
-      }
-    };
-    reader.readAsText(file);
-
     try {
-      const res = await uploadLandingFile(file);
-      if (res.url) {
-        setMediaHtmlUrl(res.url);
-        setUploadStatus("✅ HTML 파일 업로드 완료!");
-        setTimeout(() => setUploadStatus(""), 2000);
-      } else {
-        setErrorMessage(res.error || "HTML 파일 업로드에 실패했습니다.");
+      const addedItems: { id: string; url: string; htmlContent?: string; fileName: string }[] = [];
+      const errors: string[] = [];
+
+      for (const file of Array.from(files)) {
+        let htmlText = "";
+        try {
+          htmlText = await file.text();
+        } catch (_) {}
+
+        const res = await uploadLandingFile(file);
+        if (res.url || htmlText) {
+          addedItems.push({
+            id: `media-html-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            url: res.url || "",
+            htmlContent: htmlText,
+            fileName: file.name,
+          });
+        } else {
+          errors.push(`${file.name}: ${res.error || "업로드 실패"}`);
+        }
+      }
+
+      if (addedItems.length > 0) {
+        setMediaHtmlList((prev) => [...prev, ...addedItems]);
+        setUploadStatus(`✅ HTML 파일 ${addedItems.length}개 업로드 완료!`);
+        setTimeout(() => setUploadStatus(""), 2200);
+      }
+      if (errors.length > 0) {
+        setErrorMessage(errors.join(" / "));
+        if (addedItems.length === 0) setUploadStatus("");
       }
     } catch (err: any) {
       console.warn("HTML upload warning:", err);
       setErrorMessage(`HTML 업로드 오류: ${err.message || err}`);
+      setUploadStatus("");
     } finally {
       setIsUploading(false);
+      try {
+        e.target.value = "";
+      } catch (_) {}
     }
   };
 
-  // D. 동영상 파일 업로드 (대용량 안전 업로드)
+  // D. 동영상 파일 다중 업로드 (대용량 안전 업로드)
   const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    setMediaVideoFileName(`${file.name} (${sizeMb} MB)`);
-    setUploadStatus(`동영상 Storage 서버 업로드 중... (${sizeMb} MB)`);
+    setEnabledMedia((prev) => ({ ...prev, VIDEO: true }));
     setIsUploading(true);
     setErrorMessage("");
 
     try {
-      const res = await uploadLandingFile(file);
-      if (res.url) {
-        setMediaVideoUrl(res.url); // 영구 Public URL로 즉시 교체
-        setMediaVideoType("FILE");
-        setUploadStatus("✅ 동영상 업로드 완료!");
+      const addedItems: { id: string; url: string; videoType: "FILE" | "URL"; fileName: string }[] = [];
+      const errors: string[] = [];
+
+      for (const file of Array.from(files)) {
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        setUploadStatus(`동영상 Storage 서버 업로드 중... (${file.name} · ${sizeMb} MB)`);
+        const res = await uploadLandingFile(file);
+        if (res.url) {
+          addedItems.push({
+            id: `media-video-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            url: res.url,
+            videoType: "FILE",
+            fileName: `${file.name} (${sizeMb} MB)`,
+          });
+        } else {
+          errors.push(`${file.name}: ${res.error || "업로드 실패"}`);
+        }
+      }
+
+      if (addedItems.length > 0) {
+        setMediaVideoList((prev) => [...prev, ...addedItems]);
+        setUploadStatus(`✅ 동영상 ${addedItems.length}개 업로드 완료!`);
         setTimeout(() => setUploadStatus(""), 2500);
-      } else {
-        setErrorMessage(res.error || "동영상 업로드에 실패했습니다.");
-        setUploadStatus(""); // 에러 시 업로드 상태 해제
+      }
+      if (errors.length > 0) {
+        setErrorMessage(errors.join(" / "));
+        if (addedItems.length === 0) setUploadStatus("");
       }
     } catch (err: any) {
       console.warn("Video upload warning:", err);
       setErrorMessage(`동영상 업로드 오류: ${err.message || err}`);
-      setUploadStatus(""); // 에러 시 업로드 상태 해제
+      setUploadStatus("");
     } finally {
       setIsUploading(false);
       try {
@@ -640,10 +759,10 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
     // 임시 blob URL 잔존 방어 가드
     if (
-      mediaVideoUrl.startsWith("blob:") || 
-      mediaPdfUrl.startsWith("blob:") || 
       thumbnailUrl.startsWith("blob:") ||
-      mediaImages.some(img => img.startsWith("blob:"))
+      mediaImages.some((img) => img.startsWith("blob:")) ||
+      mediaPdfList.some((p) => p.url.startsWith("blob:")) ||
+      mediaVideoList.some((v) => v.url.startsWith("blob:"))
     ) {
       setErrorMessage("파일 서버 전송이 아직 처리 중입니다. 잠시 후 다시 시도해 주세요.");
       return;
@@ -670,60 +789,105 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     const items: ProjectMediaItem[] = [];
 
     if (enabledMedia.IMAGE) {
-      const imgUrl = mediaImageUrl.trim() || mediaImages[0] || thumbnailUrl;
+      const combinedImages = [...mediaImages];
+      if (mediaImageUrl.trim() && !combinedImages.includes(mediaImageUrl.trim())) {
+        combinedImages.push(mediaImageUrl.trim());
+      }
+      const finalImages = combinedImages.length > 0 ? combinedImages : [thumbnailUrl.trim()];
       items.push({
         id: "media-img",
         type: "IMAGE",
         priority: priorities.IMAGE,
-        title: "상세 이미지",
-        url: imgUrl,
-        images: mediaImages.length > 0 ? mediaImages : [imgUrl],
+        title: `상세 이미지 (${finalImages.length}장)`,
+        url: finalImages[0],
+        images: finalImages,
       });
     }
 
     if (enabledMedia.PDF) {
-      if (!mediaPdfUrl.trim()) {
+      const finalPdfs = [...mediaPdfList];
+      if (mediaPdfUrlInput.trim()) {
+        finalPdfs.push({
+          id: `media-pdf-url-${Date.now()}`,
+          url: mediaPdfUrlInput.trim(),
+          fileName: "외부 PDF 문서",
+        });
+      }
+      if (finalPdfs.length === 0) {
         setErrorMessage("PDF 문서를 선택했으나 파일이나 URL이 등록되지 않았습니다.");
         return;
       }
-      items.push({
-        id: "media-pdf",
-        type: "PDF",
-        priority: priorities.PDF,
-        title: "IR 피치덱 PDF",
-        url: mediaPdfUrl.trim(),
+      finalPdfs.forEach((pdf, idx) => {
+        items.push({
+          id: pdf.id || `media-pdf-${idx}`,
+          type: "PDF",
+          priority: priorities.PDF,
+          title:
+            finalPdfs.length > 1
+              ? `IR 피치덱 PDF #${idx + 1}${pdf.fileName ? ` · ${pdf.fileName}` : ""}`
+              : `IR 피치덱 PDF${pdf.fileName ? ` · ${pdf.fileName}` : ""}`,
+          url: pdf.url.trim(),
+          fileName: pdf.fileName,
+        });
       });
     }
 
     if (enabledMedia.HTML) {
-      if (!mediaHtmlUrl.trim() && !mediaHtmlContent.trim()) {
+      const finalHtmls = [...mediaHtmlList];
+      if (mediaHtmlUrlInput.trim()) {
+        finalHtmls.push({
+          id: `media-html-url-${Date.now()}`,
+          url: mediaHtmlUrlInput.trim(),
+          fileName: "외부 웹 시연 URL",
+        });
+      }
+      if (finalHtmls.length === 0) {
         setErrorMessage("HTML 포맷을 선택했으나 파일이나 URL이 등록되지 않았습니다.");
         return;
       }
-      items.push({
-        id: "media-html",
-        type: "HTML",
-        priority: priorities.HTML,
-        title: "시연 웹페이지 (HTML)",
-        url: mediaHtmlUrl.trim(),
-        htmlContent: mediaHtmlContent,
-        fileName: mediaHtmlFileName,
+      finalHtmls.forEach((html, idx) => {
+        items.push({
+          id: html.id || `media-html-${idx}`,
+          type: "HTML",
+          priority: priorities.HTML,
+          title:
+            finalHtmls.length > 1
+              ? `시연 웹페이지 (HTML) #${idx + 1}${html.fileName ? ` · ${html.fileName}` : ""}`
+              : `시연 웹페이지 (HTML)${html.fileName ? ` · ${html.fileName}` : ""}`,
+          url: html.url.trim(),
+          htmlContent: html.htmlContent,
+          fileName: html.fileName,
+        });
       });
     }
 
     if (enabledMedia.VIDEO) {
-      if (!mediaVideoUrl.trim()) {
+      const finalVideos = [...mediaVideoList];
+      if (mediaVideoUrlInput.trim()) {
+        finalVideos.push({
+          id: `media-video-url-${Date.now()}`,
+          url: mediaVideoUrlInput.trim(),
+          videoType: "URL",
+          fileName: "외부 영상 링크",
+        });
+      }
+      if (finalVideos.length === 0) {
         setErrorMessage("동영상 포맷을 선택했으나 영상 파일이나 URL이 등록되지 않았습니다.");
         return;
       }
-      items.push({
-        id: "media-video",
-        type: "VIDEO",
-        priority: priorities.VIDEO,
-        title: "프로젝트 소개 영상",
-        url: mediaVideoUrl.trim(),
-        videoType: mediaVideoType,
-        fileName: mediaVideoFileName,
+      finalVideos.forEach((vid, idx) => {
+        items.push({
+          id: vid.id || `media-video-${idx}`,
+          type: "VIDEO",
+          priority: priorities.VIDEO,
+          title:
+            finalVideos.length > 1
+              ? `프로젝트 소개 영상 #${idx + 1}${vid.fileName ? ` · ${vid.fileName}` : ""}`
+              : `프로젝트 소개 영상${vid.fileName ? ` · ${vid.fileName}` : ""}`,
+          url: vid.url.trim(),
+          videoType: vid.videoType,
+          fileName: vid.fileName,
+        });
       });
     }
 
@@ -1144,13 +1308,16 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 <input
                   type="file"
                   accept="image/*"
+                  onClick={(e) => {
+                    (e.target as HTMLInputElement).value = "";
+                  }}
                   onChange={handleThumbnailFileUpload}
                   className="hidden"
                 />
               </label>
               <div className="flex-1 w-full">
                 <input
-                  type="url"
+                  type="text"
                   value={thumbnailUrl}
                   onChange={(e) => setThumbnailUrl(e.target.value)}
                   placeholder="또는 이미지 URL 직접 입력"
@@ -1167,24 +1334,24 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
           </div>
 
           {/* ========================================================
-              ★ 6. 상세페이지 컨텐츠 미디어 4종 & 우선순위 (요구사항 2)
+              ★ 6. 상세페이지 컨텐츠 미디어 4종 & 우선순위 (다중 파일 업로드 지원)
               ======================================================== */}
           <div className="pt-2 border-t border-slate-200 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Film size={16} className="text-blue-600" />
-                  상세페이지 컨텐츠 미디어 (다중 선택 & 우선순위 지정)
+                  상세페이지 컨텐츠 미디어 (4종 모두 여러 개 파일 업로드 & 우선순위 지정)
                 </h3>
                 <p className="text-xs text-slate-500">
-                  원하는 미디어를 다중 선택하고, 드롭다운으로 1~4순위 노출 순서를 정하세요.
+                  이미지, PDF, HTML, 동영상 각각 여러 개의 파일이나 URL을 추가할 수 있으며 1~4순위 노출 순서를 정할 수 있습니다.
                 </p>
               </div>
             </div>
 
             {/* 4종 미디어 카드 목록 */}
             <div className="space-y-3">
-              {/* [미디어 1: 이미지] */}
+              {/* [미디어 1: 이미지 (다중)] */}
               <div className={`p-4 rounded-2xl border transition-all ${
                 enabledMedia.IMAGE ? "border-blue-300 bg-blue-50/20" : "border-slate-200 bg-slate-50 opacity-75"
               }`}>
@@ -1197,7 +1364,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
                     />
                     <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                      <ImageIcon size={15} className="text-blue-600" /> 이미지 상세페이지 (다중 이미지)
+                      <ImageIcon size={15} className="text-blue-600" /> 이미지 상세페이지 (다중 이미지 업로드 · 현재 {mediaImages.length}장)
                     </span>
                   </label>
 
@@ -1220,37 +1387,64 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
                 {enabledMedia.IMAGE && (
                   <div className="space-y-2.5 pl-6">
-                    <div className="flex items-center gap-2">
-                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs">
-                        <Upload size={13} /> 이미지 파일 추가
+                    <div className="flex flex-col sm:flex-row items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer shadow-2xs shrink-0">
+                        <Upload size={13} /> 이미지 파일 다중 선택
                         <input
                           type="file"
                           accept="image/*"
                           multiple
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = "";
+                          }}
                           onChange={handleDetailImagesUpload}
                           className="hidden"
                         />
                       </label>
-                      <input
-                        type="url"
-                        value={mediaImageUrl}
-                        onChange={(e) => setMediaImageUrl(e.target.value)}
-                        placeholder="또는 이미지 URL 입력"
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
-                      />
+                      <div className="flex items-center gap-1.5 flex-1 w-full">
+                        <input
+                          type="text"
+                          value={mediaImageUrl}
+                          onChange={(e) => setMediaImageUrl(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && mediaImageUrl.trim()) {
+                              e.preventDefault();
+                              setMediaImages((prev) => [...prev, mediaImageUrl.trim()]);
+                              setMediaImageUrl("");
+                            }
+                          }}
+                          placeholder="또는 이미지 URL 입력 후 [+ URL 추가]"
+                          className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!mediaImageUrl.trim()) return;
+                            setMediaImages((prev) => [...prev, mediaImageUrl.trim()]);
+                            setMediaImageUrl("");
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          + URL 추가
+                        </button>
+                      </div>
                     </div>
 
                     {mediaImages.length > 0 && (
                       <div className="flex items-center gap-2 overflow-x-auto py-1">
                         {mediaImages.map((img, idx) => (
-                          <div key={idx} className="relative w-16 h-12 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
+                          <div key={idx} className="relative w-20 h-14 rounded-lg overflow-hidden border border-slate-200 shrink-0 group bg-white">
                             <img src={img} alt={`thumb-${idx}`} className="w-full h-full object-cover" />
+                            <span className="absolute top-0.5 left-0.5 px-1 rounded bg-black/60 text-white text-[9px] font-mono">
+                              #{idx + 1}
+                            </span>
                             <button
                               type="button"
                               onClick={() => setMediaImages(mediaImages.filter((_, i) => i !== idx))}
                               className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                              title="이미지 삭제"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         ))}
@@ -1260,7 +1454,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 )}
               </div>
 
-              {/* [미디어 2: PDF 문서] */}
+              {/* [미디어 2: PDF 문서 (다중)] */}
               <div className={`p-4 rounded-2xl border transition-all ${
                 enabledMedia.PDF ? "border-indigo-300 bg-indigo-50/20" : "border-slate-200 bg-slate-50 opacity-75"
               }`}>
@@ -1273,7 +1467,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                       className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
                     />
                     <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                      <FileText size={15} className="text-indigo-600" /> PDF 문서 (전용 1페이지/세로 뷰어)
+                      <FileText size={15} className="text-indigo-600" /> PDF 문서 (다중 업로드 지원 · 현재 {mediaPdfList.length}개)
                     </span>
                   </label>
 
@@ -1295,35 +1489,100 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 </div>
 
                 {enabledMedia.PDF && (
-                  <div className="space-y-2 pl-6">
+                  <div className="space-y-2.5 pl-6">
                     <div className="flex flex-col sm:flex-row items-center gap-2">
-                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs shrink-0">
-                        <Upload size={13} /> PDF 파일 선택
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 cursor-pointer shadow-2xs shrink-0">
+                        <Upload size={13} /> PDF 파일 다중 선택
                         <input
                           type="file"
-                          accept="application/pdf"
+                          accept="application/pdf,.pdf"
+                          multiple
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = "";
+                          }}
                           onChange={handlePdfUpload}
                           className="hidden"
                         />
                       </label>
-                      <input
-                        type="text"
-                        value={mediaPdfUrl}
-                        onChange={(e) => setMediaPdfUrl(e.target.value)}
-                        placeholder="또는 PDF URL 입력 (예: https://.../deck.pdf)"
-                        className="flex-1 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
-                      />
+                      <div className="flex items-center gap-1.5 flex-1 w-full">
+                        <input
+                          type="text"
+                          value={mediaPdfUrlInput}
+                          onChange={(e) => setMediaPdfUrlInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && mediaPdfUrlInput.trim()) {
+                              e.preventDefault();
+                              setMediaPdfList((prev) => [
+                                ...prev,
+                                {
+                                  id: `media-pdf-url-${Date.now()}`,
+                                  url: mediaPdfUrlInput.trim(),
+                                  fileName: `PDF 링크 #${prev.length + 1}`,
+                                },
+                              ]);
+                              setMediaPdfUrlInput("");
+                            }
+                          }}
+                          placeholder="또는 PDF URL 입력 후 [+ URL 추가]"
+                          className="flex-1 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!mediaPdfUrlInput.trim()) return;
+                            setMediaPdfList((prev) => [
+                              ...prev,
+                              {
+                                id: `media-pdf-url-${Date.now()}`,
+                                url: mediaPdfUrlInput.trim(),
+                                fileName: `PDF 링크 #${prev.length + 1}`,
+                              },
+                            ]);
+                            setMediaPdfUrlInput("");
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          + URL 추가
+                        </button>
+                      </div>
                     </div>
-                    {mediaPdfUrl && (
-                      <p className="text-[11px] text-emerald-700 font-mono truncate">
-                        ✓ 연결된 PDF: {mediaPdfUrl.slice(0, 60)}...
-                      </p>
+
+                    {mediaPdfList.length > 0 && (
+                      <div className="space-y-1.5">
+                        {mediaPdfList.map((pdf, idx) => (
+                          <div
+                            key={pdf.id || idx}
+                            className="p-2 rounded-xl bg-white border border-indigo-200 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-mono text-[10px] font-bold shrink-0">
+                                PDF #{idx + 1}
+                              </span>
+                              <span className="font-semibold text-slate-800 truncate">
+                                {pdf.fileName || "PDF 문서"}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono truncate hidden sm:inline">
+                                ({pdf.url.slice(0, 45)}...)
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMediaPdfList((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                            >
+                              <Trash2 size={12} /> 삭제
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* [미디어 3: HTML 시연 및 HTML 파일 업로드] */}
+              {/* [미디어 3: HTML 시연 및 HTML 파일 업로드 (다중)] */}
               <div className={`p-4 rounded-2xl border transition-all ${
                 enabledMedia.HTML ? "border-emerald-300 bg-emerald-50/20" : "border-slate-200 bg-slate-50 opacity-75"
               }`}>
@@ -1336,7 +1595,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                       className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
                     />
                     <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                      <Globe size={15} className="text-emerald-600" /> HTML (웹페이지 URL 또는 HTML 파일 업로드)
+                      <Globe size={15} className="text-emerald-600" /> HTML (웹페이지 URL 또는 HTML 파일 다중 업로드 · 현재 {mediaHtmlList.length}개)
                     </span>
                   </label>
 
@@ -1358,35 +1617,97 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 </div>
 
                 {enabledMedia.HTML && (
-                  <div className="space-y-2 pl-6">
+                  <div className="space-y-2.5 pl-6">
                     <div className="flex flex-col sm:flex-row items-center gap-2">
-                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs shrink-0">
-                        <Upload size={13} /> HTML 파일 업로드
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 cursor-pointer shadow-2xs shrink-0">
+                        <Upload size={13} /> HTML 파일 다중 업로드
                         <input
                           type="file"
-                          accept=".html,.htm"
+                          accept=".html,.htm,text/html"
+                          multiple
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = "";
+                          }}
                           onChange={handleHtmlFileUpload}
                           className="hidden"
                         />
                       </label>
-                      <input
-                        type="url"
-                        value={mediaHtmlUrl}
-                        onChange={(e) => setMediaHtmlUrl(e.target.value)}
-                        placeholder="또는 시연 웹사이트 URL (https://...)"
-                        className="flex-1 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
-                      />
+                      <div className="flex items-center gap-1.5 flex-1 w-full">
+                        <input
+                          type="text"
+                          value={mediaHtmlUrlInput}
+                          onChange={(e) => setMediaHtmlUrlInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && mediaHtmlUrlInput.trim()) {
+                              e.preventDefault();
+                              setMediaHtmlList((prev) => [
+                                ...prev,
+                                {
+                                  id: `media-html-url-${Date.now()}`,
+                                  url: mediaHtmlUrlInput.trim(),
+                                  fileName: `웹 시연 URL #${prev.length + 1}`,
+                                },
+                              ]);
+                              setMediaHtmlUrlInput("");
+                            }
+                          }}
+                          placeholder="또는 시연 웹사이트 URL 입력 후 [+ URL 추가]"
+                          className="flex-1 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!mediaHtmlUrlInput.trim()) return;
+                            setMediaHtmlList((prev) => [
+                              ...prev,
+                              {
+                                id: `media-html-url-${Date.now()}`,
+                                url: mediaHtmlUrlInput.trim(),
+                                fileName: `웹 시연 URL #${prev.length + 1}`,
+                              },
+                            ]);
+                            setMediaHtmlUrlInput("");
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          + URL 추가
+                        </button>
+                      </div>
                     </div>
-                    {(mediaHtmlFileName || mediaHtmlUrl) && (
-                      <p className="text-[11px] text-emerald-700 font-mono truncate">
-                        ✓ {mediaHtmlFileName ? `업로드 파일: ${mediaHtmlFileName}` : `웹 URL: ${mediaHtmlUrl}`}
-                      </p>
+
+                    {mediaHtmlList.length > 0 && (
+                      <div className="space-y-1.5">
+                        {mediaHtmlList.map((html, idx) => (
+                          <div
+                            key={html.id || idx}
+                            className="p-2 rounded-xl bg-white border border-emerald-200 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-mono text-[10px] font-bold shrink-0">
+                                HTML #{idx + 1}
+                              </span>
+                              <span className="font-semibold text-slate-800 truncate">
+                                {html.fileName || html.url || "HTML 시연 파일"}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMediaHtmlList((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                            >
+                              <Trash2 size={12} /> 삭제
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* [미디어 4: 동영상 파일 업로드 & 동영상 URL] */}
+              {/* [미디어 4: 동영상 파일 업로드 & 동영상 URL (다중)] */}
               <div className={`p-4 rounded-2xl border transition-all ${
                 enabledMedia.VIDEO ? "border-rose-300 bg-rose-50/20" : "border-slate-200 bg-slate-50 opacity-75"
               }`}>
@@ -1399,7 +1720,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                       className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
                     />
                     <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                      <Video size={15} className="text-rose-600" /> 동영상 (파일 직접 업로드 or 영상 URL)
+                      <Video size={15} className="text-rose-600" /> 동영상 (파일 다중 업로드 or 영상 URL · 현재 {mediaVideoList.length}개)
                     </span>
                   </label>
 
@@ -1421,58 +1742,99 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 </div>
 
                 {enabledMedia.VIDEO && (
-                  <div className="space-y-2 pl-6">
+                  <div className="space-y-2.5 pl-6">
                     <div className="flex flex-col sm:flex-row items-center gap-2">
                       <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer shadow-2xs shrink-0">
-                        <Upload size={13} /> 동영상 파일 업로드 (MP4/WebM)
+                        <Upload size={13} /> 동영상 파일 다중 업로드 (MP4/WebM)
                         <input
                           type="file"
                           accept="video/mp4,video/webm,video/*"
-                          onClick={(e) => { (e.target as HTMLInputElement).value = ""; }}
+                          multiple
+                          onClick={(e) => {
+                            (e.target as HTMLInputElement).value = "";
+                          }}
                           onChange={handleVideoFileUpload}
                           className="hidden"
                         />
                       </label>
-                      <input
-                        type="text"
-                        value={mediaVideoUrl}
-                        onChange={(e) => {
-                          setMediaVideoUrl(e.target.value);
-                          setMediaVideoType("URL");
-                        }}
-                        placeholder="또는 유튜브 / 비디오 스트리밍 URL 입력"
-                        className="flex-1 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
-                      />
+                      <div className="flex items-center gap-1.5 flex-1 w-full">
+                        <input
+                          type="text"
+                          value={mediaVideoUrlInput}
+                          onChange={(e) => setMediaVideoUrlInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && mediaVideoUrlInput.trim()) {
+                              e.preventDefault();
+                              setMediaVideoList((prev) => [
+                                ...prev,
+                                {
+                                  id: `media-video-url-${Date.now()}`,
+                                  url: mediaVideoUrlInput.trim(),
+                                  videoType: "URL",
+                                  fileName: `영상 링크 #${prev.length + 1}`,
+                                },
+                              ]);
+                              setMediaVideoUrlInput("");
+                            }
+                          }}
+                          placeholder="또는 유튜브 / 비디오 URL 입력 후 [+ URL 추가]"
+                          className="flex-1 w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono bg-white outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!mediaVideoUrlInput.trim()) return;
+                            setMediaVideoList((prev) => [
+                              ...prev,
+                              {
+                                id: `media-video-url-${Date.now()}`,
+                                url: mediaVideoUrlInput.trim(),
+                                videoType: "URL",
+                                fileName: `영상 링크 #${prev.length + 1}`,
+                              },
+                            ]);
+                            setMediaVideoUrlInput("");
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          + URL 추가
+                        </button>
+                      </div>
                     </div>
 
-                    {/* 동영상 업로드 파일명 및 상태 표시 */}
-                    {(mediaVideoFileName || mediaVideoUrl) && (
-                      <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono transition-colors ${
-                        mediaVideoUrl
-                          ? "bg-emerald-50/80 border-emerald-200 text-emerald-950"
-                          : isUploading
-                          ? "bg-blue-50 border-blue-200 text-blue-900"
-                          : "bg-rose-50 border-rose-200 text-rose-900"
-                      }`}>
-                        <div className="flex items-center gap-2 truncate">
-                          <Play size={14} className={mediaVideoUrl ? "text-emerald-600 shrink-0" : "text-rose-600 shrink-0"} />
-                          <span className="truncate">
-                            {mediaVideoFileName ? `업로드 파일: ${mediaVideoFileName}` : `영상 링크: ${mediaVideoUrl}`}
-                          </span>
-                        </div>
-                        {isUploading ? (
-                          <span className="text-[11px] font-sans font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 animate-pulse">
-                            <Loader2 size={11} className="animate-spin" /> 서버 전송 중...
-                          </span>
-                        ) : mediaVideoUrl ? (
-                          <span className="text-[11px] font-sans font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                            ✓ 업로드 완료
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-sans font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md shrink-0">
-                            ⚠️ 업로드 실패
-                          </span>
-                        )}
+                    {/* 동영상 업로드 목록 표시 */}
+                    {mediaVideoList.length > 0 && (
+                      <div className="space-y-1.5">
+                        {mediaVideoList.map((vid, idx) => (
+                          <div
+                            key={vid.id || idx}
+                            className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-950 flex items-center justify-between gap-2 text-xs font-mono"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Play size={14} className="text-emerald-600 shrink-0" />
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-200/70 text-emerald-900 text-[10px] font-bold shrink-0">
+                                VIDEO #{idx + 1}
+                              </span>
+                              <span className="truncate font-sans font-semibold">
+                                {vid.fileName || vid.url}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] font-sans font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                                ✓ 등록됨
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMediaVideoList((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                                className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-sans font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 size={12} /> 삭제
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

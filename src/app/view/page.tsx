@@ -47,8 +47,13 @@ export default function HtmlFullViewerPage() {
             document.title = `${mapped.title} (${mapped.teamName}) · 웹 시연 뷰어`;
           }
 
-          const htmlItem = mapped.mediaItems?.find((m) => m.type === "HTML");
-          const targetUrl = htmlItem?.url || mapped.landingUrl || directUrl || "";
+          const itemId = params.get("itemId");
+          const htmlItems = mapped.mediaItems?.filter((m) => m.type === "HTML") || [];
+          const htmlItem =
+            (itemId && htmlItems.find((m) => m.id === itemId)) ||
+            (directUrl && htmlItems.find((m) => m.url === directUrl)) ||
+            htmlItems[0];
+          const targetUrl = directUrl || htmlItem?.url || mapped.landingUrl || "";
 
           // A. DB에 htmlContent 텍스트가 바로 저장되어 있는 경우
           if (htmlItem?.htmlContent && htmlItem.htmlContent.trim()) {
@@ -211,3 +216,4 @@ export default function HtmlFullViewerPage() {
     </div>
   );
 }
+

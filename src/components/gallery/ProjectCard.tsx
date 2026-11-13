@@ -3,7 +3,7 @@
 import React from "react";
 import { Project } from "@/types";
 import { useApp } from "@/context/AppContext";
-import { Users, ChevronRight, Award, CheckCircle2 } from "lucide-react";
+import { Users, ChevronRight, Award, CheckCircle2, Edit3 } from "lucide-react";
 
 interface ProjectCardProps {
   project: Project;
@@ -15,14 +15,21 @@ interface ProjectCardProps {
 export const ProjectCard: React.FC<ProjectCardProps> = ({
   project,
   onSelect,
+  onEditClick,
 }) => {
-  const { currentUser, getUserInvestmentForProject } = useApp();
+  const { currentUser, canStudentEditProject, getUserInvestmentForProject } = useApp();
 
   const isOwned = Boolean(
     currentUser &&
       (project.isUserProject ||
         (currentUser.teamId && currentUser.teamId === project.teamId) ||
-        currentUser.id === project.authorId)
+        currentUser.id === project.authorId ||
+        (currentUser.email && project.authorEmail?.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (project.teamMemberIds && currentUser.id && project.teamMemberIds.includes(currentUser.id)))
+  );
+
+  const canEdit = Boolean(
+    currentUser && (currentUser.role === "ADMIN" || (isOwned && canStudentEditProject))
   );
 
   const existingInvestment = currentUser ? getUserInvestmentForProject(project.id) : undefined;
@@ -128,19 +135,36 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </div>
         </div>
 
-        {/* Action Button */}
-        <button
-          type="button"
-          onClick={() => onSelect(project)}
-          className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
-            isOwned
-              ? "bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200"
-              : "bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200/80 hover:border-blue-600"
-          }`}
-        >
-          <span>{isOwned ? "내 팀 프로젝트 상세 확인" : "프로젝트 상세 & 모의투자"}</span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onSelect(project)}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              isOwned
+                ? "bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200"
+                : "bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200/80 hover:border-blue-600"
+            }`}
+          >
+            <span>{isOwned ? "내 팀 프로젝트 상세 확인" : "프로젝트 상세 & 모의투자"}</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+
+          {canEdit && onEditClick && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditClick(project);
+              }}
+              title="출품작 수정 및 파일 업로드"
+              className="py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer shrink-0"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>수정</span>
+            </button>
+          )}
+        </div>
       </div>
 
     </div>

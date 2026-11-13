@@ -422,6 +422,10 @@ function MainDashboard() {
             {currentTab === "admin" && currentUser?.role === "ADMIN" && (
               <AdminDashboard
                 openProjectorRanking={() => setIsProjectorRankingOpen(true)}
+                onEditProject={(p) => {
+                  setEditingProject(p);
+                  setIsCreateModalOpen(true);
+                }}
               />
             )}
 

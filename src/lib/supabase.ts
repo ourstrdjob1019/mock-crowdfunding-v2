@@ -22,6 +22,42 @@ function sanitizeExt(fileName: string, fallback: string = "bin"): string {
 }
 
 /**
+ * 파일명과 브라우저 File.type을 바탕으로 정확한 Content-Type 추론
+ */
+function inferContentType(fileName: string, rawType?: string): string | undefined {
+  if (rawType && rawType.trim() && rawType !== "application/octet-stream") {
+    return rawType.trim();
+  }
+  const ext = sanitizeExt(fileName, "");
+  switch (ext) {
+    case "pdf":
+      return "application/pdf";
+    case "html":
+    case "htm":
+      return "text/html; charset=utf-8";
+    case "mp4":
+      return "video/mp4";
+    case "webm":
+      return "video/webm";
+    case "mov":
+      return "video/quicktime";
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "svg":
+      return "image/svg+xml";
+    default:
+      return rawType || undefined;
+  }
+}
+
+/**
  * 썸네일 이미지를 Supabase Storage (v2-project-thumbnails)에 업로드
  */
 export async function uploadThumbnail(file: File): Promise<{ url: string | null; error: string | null }> {
@@ -44,6 +80,7 @@ export async function uploadThumbnail(file: File): Promise<{ url: string | null;
       .upload(filePath, file, {
         cacheControl: "3600",
         upsert: true,
+        contentType: inferContentType(file.name, file.type),
       });
 
     if (uploadError) {
@@ -83,29 +120,18 @@ export async function uploadLandingFile(file: File): Promise<{ url: string | nul
     const fileExt = sanitizeExt(file.name, "bin");
     const fileName = `landing_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
     const filePath = `files/${fileName}`;
+    const detectedContentType = inferContentType(file.name, file.type);
 
-    // 동영상 파일 여부 판단
-    const isVideo = (file.type && file.type.toLowerCase().startsWith("video/")) || 
-                    /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
-
-    // 1차 업로드 시도:
-    // Supabase v2-landing-files 버킷의 allowed_mime_types에 비디오 타입이 누락되어 있을 수 있으므로,
-    // 비디오 파일인 경우 브라우저 FormData가 video/mp4를 달아 415 오류를 유발하지 않도록 
-    // 버킷 허용 MIME(text/html)으로 래핑한 Blob을 전달합니다.
-    const initialPayload: Blob | File = isVideo
-      ? new Blob([file], { type: "text/html" })
-      : file;
-    const initialContentType = isVideo ? "text/html" : (file.type || undefined);
-
+    // 1차 업로드 시도: 실제 파일과 정확한 MIME 타입으로 정식 업로드
     let uploadRes = await supabase.storage
       .from("v2-landing-files")
-      .upload(filePath, initialPayload, {
+      .upload(filePath, file, {
         cacheControl: "3600",
         upsert: true,
-        contentType: initialContentType,
+        contentType: detectedContentType,
       });
 
-    // 2차 스마트 폴백: 버킷의 allowed_mime_types 제한(415, video/* 거부 등) 시 자동 우회 통과
+    // 2차 스마트 폴백: 버킷의 allowed_mime_types 제한(415 등) 발생 시에만 우회 통과
     const isMimeError = (err: any) => {
       if (!err) return false;
       const msg = (err.message || "").toLowerCase();
@@ -128,7 +154,7 @@ export async function uploadLandingFile(file: File): Promise<{ url: string | nul
         .upload(filePath, fallbackBlob, {
           cacheControl: "3600",
           upsert: true,
-          contentType: "text/html", // 버킷 허용 MIME 우회 통과
+          contentType: "text/html",
         });
     }
 
