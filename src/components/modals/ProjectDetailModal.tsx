@@ -75,23 +75,41 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
   // Supabase Storage에 업로드된 HTML 파일을 상세 모달 열람 시 온디맨드(On-demand)로 로드하여 srcDoc에 주입
   useEffect(() => {
-    if (!project?.mediaItems) return;
-    project.mediaItems.forEach((item) => {
-      if (
-        item.type === "HTML" &&
-        !item.htmlContent &&
-        item.url &&
-        (item.url.includes("/storage/v1/object/public/") || item.url.endsWith(".html"))
-      ) {
-        fetch(item.url)
-          .then((res) => (res.ok ? res.text() : ""))
-          .then((htmlText) => {
-            if (htmlText) {
-              setFetchedHtmlMap((prev) => ({ ...prev, [item.url]: htmlText }));
-            }
-          })
-          .catch((err) => console.warn("HTML Storage fetch fallback:", err));
-      }
+    if (!project) return;
+    const urlsToFetch: string[] = [];
+
+    if (project.mediaItems && project.mediaItems.length > 0) {
+      project.mediaItems.forEach((item) => {
+        if (
+          item.type === "HTML" &&
+          !item.htmlContent &&
+          item.url &&
+          (item.url.includes("/storage/v1/object/public/") ||
+            item.url.toLowerCase().endsWith(".html") ||
+            item.url.toLowerCase().endsWith(".htm"))
+        ) {
+          urlsToFetch.push(item.url);
+        }
+      });
+    } else if (
+      (project.landingFormat === "HTML" || project.landingFormat === "WEB") &&
+      project.landingUrl &&
+      (project.landingUrl.includes("/storage/v1/object/public/") ||
+        project.landingUrl.toLowerCase().endsWith(".html") ||
+        project.landingUrl.toLowerCase().endsWith(".htm"))
+    ) {
+      urlsToFetch.push(project.landingUrl);
+    }
+
+    urlsToFetch.forEach((targetUrl) => {
+      fetch(targetUrl)
+        .then((res) => (res.ok ? res.text() : ""))
+        .then((htmlText) => {
+          if (htmlText) {
+            setFetchedHtmlMap((prev) => ({ ...prev, [targetUrl]: htmlText }));
+          }
+        })
+        .catch((err) => console.warn("HTML Storage fetch fallback:", err));
     });
   }, [project]);
 
@@ -472,45 +490,64 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                       )}
 
                       {/* C. HTML */}
-                      {item.type === "HTML" && (
-                        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
-                          <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
-                            <span className="font-mono text-slate-600 truncate">
-                              {item.fileName ? `HTML 파일: ${item.fileName}` : formatWebUrl(item.url)}
-                            </span>
-                            {item.url && (
-                              <a
-                                href={formatWebUrl(item.url)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1 shadow-2xs"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>새 창 열기</span>
-                              </a>
-                            )}
-                          </div>
-                          <div className="p-2 sm:p-3">
-                            <div className="relative w-full h-[500px] sm:h-[620px] rounded-xl overflow-hidden border border-slate-200 bg-white shadow-inner">
-                              {item.htmlContent || fetchedHtmlMap[item.url] ? (
-                                <iframe
-                                  srcDoc={item.htmlContent || fetchedHtmlMap[item.url]}
-                                  title={`${project.title} Uploaded HTML`}
-                                  className="w-full h-full border-0"
-                                  sandbox="allow-scripts allow-forms allow-same-origin"
-                                />
-                              ) : (
-                                <iframe
-                                  src={formatWebUrl(item.url)}
-                                  title={`${project.title} Web Prototype`}
-                                  className="w-full h-full border-0"
-                                  sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-                                />
-                              )}
+                      {item.type === "HTML" &&
+                        (() => {
+                          const isUploadedHtml = Boolean(
+                            item.fileName ||
+                              item.htmlContent ||
+                              fetchedHtmlMap[item.url] ||
+                              item.url?.includes("/storage/v1/object/public/") ||
+                              item.url?.toLowerCase().endsWith(".html") ||
+                              item.url?.toLowerCase().endsWith(".htm")
+                          );
+                          const openInNewTabHref = isUploadedHtml
+                            ? `/view?id=${encodeURIComponent(project.id)}`
+                            : formatWebUrl(item.url);
+
+                          return (
+                            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                              <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
+                                <span className="font-mono text-slate-600 truncate">
+                                  {item.fileName
+                                    ? `HTML 파일: ${item.fileName}`
+                                    : isUploadedHtml
+                                    ? "업로드된 HTML 웹 시연 파일"
+                                    : formatWebUrl(item.url)}
+                                </span>
+                                {(item.url || item.htmlContent) && (
+                                  <a
+                                    href={openInNewTabHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1 shadow-2xs shrink-0"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>새 창 열기</span>
+                                  </a>
+                                )}
+                              </div>
+                              <div className="p-2 sm:p-3">
+                                <div className="relative w-full h-[500px] sm:h-[620px] rounded-xl overflow-hidden border border-slate-200 bg-white shadow-inner">
+                                  {item.htmlContent || fetchedHtmlMap[item.url] ? (
+                                    <iframe
+                                      srcDoc={item.htmlContent || fetchedHtmlMap[item.url]}
+                                      title={`${project.title} Uploaded HTML`}
+                                      className="w-full h-full border-0"
+                                      sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                                    />
+                                  ) : (
+                                    <iframe
+                                      src={formatWebUrl(item.url)}
+                                      title={`${project.title} Web Prototype`}
+                                      className="w-full h-full border-0"
+                                      sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+                                    />
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      )}
+                          );
+                        })()}
 
                       {/* D. VIDEO */}
                       {item.type === "VIDEO" && (
@@ -580,32 +617,57 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   )}
 
                   {/* 구버전 WEB/HTML */}
-                  {(project.landingFormat === "WEB" || project.landingFormat === "HTML") && (
-                    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
-                      <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
-                        <span className="font-mono text-slate-700 truncate">{formatWebUrl(project.landingUrl || project.webDemoUrl)}</span>
-                        {formatWebUrl(project.landingUrl || project.webDemoUrl) && (
-                          <a
-                            href={formatWebUrl(project.landingUrl || project.webDemoUrl)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-semibold flex items-center gap-1"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>새 탭 열기</span>
-                          </a>
-                        )}
-                      </div>
-                      <div className="p-2 sm:p-3">
-                        <iframe
-                          src={formatWebUrl(project.landingUrl || project.webDemoUrl)}
-                          title={`${project.title} Web Prototype`}
-                          className="w-full h-[550px] border-0 rounded-xl"
-                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                        />
-                      </div>
-                    </div>
-                  )}
+                  {(project.landingFormat === "WEB" || project.landingFormat === "HTML") &&
+                    (() => {
+                      const rawUrl = project.landingUrl || project.webDemoUrl || "";
+                      const isUploadedHtml = Boolean(
+                        fetchedHtmlMap[rawUrl] ||
+                          rawUrl.includes("/storage/v1/object/public/") ||
+                          rawUrl.toLowerCase().endsWith(".html") ||
+                          rawUrl.toLowerCase().endsWith(".htm")
+                      );
+                      const openHref = isUploadedHtml
+                        ? `/view?id=${encodeURIComponent(project.id)}`
+                        : formatWebUrl(rawUrl);
+
+                      return (
+                        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                          <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
+                            <span className="font-mono text-slate-700 truncate">
+                              {isUploadedHtml ? "업로드된 HTML 웹 시연 파일" : formatWebUrl(rawUrl)}
+                            </span>
+                            {rawUrl && (
+                              <a
+                                href={openHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1 shrink-0"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>새 창 열기</span>
+                              </a>
+                            )}
+                          </div>
+                          <div className="p-2 sm:p-3">
+                            {fetchedHtmlMap[rawUrl] ? (
+                              <iframe
+                                srcDoc={fetchedHtmlMap[rawUrl]}
+                                title={`${project.title} Uploaded HTML`}
+                                className="w-full h-[550px] border-0 rounded-xl"
+                                sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                              />
+                            ) : (
+                              <iframe
+                                src={formatWebUrl(rawUrl)}
+                                title={`${project.title} Web Prototype`}
+                                className="w-full h-[550px] border-0 rounded-xl"
+                                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                 </div>
               )}
             </div>
