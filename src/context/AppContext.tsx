@@ -220,10 +220,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!currentIsLoggedOut && currentSavedId && finalUsers.length > 0) {
             const found = finalUsers.find((u: User) => u.id === currentSavedId);
             if (found) {
-              setCurrentUserState(found);
+              // 내용이 실제로 바뀐 경우에만 currentUser 갱신 (불필요한 리렌더/입력폼 초기화 방지)
+              setCurrentUserState((prev) =>
+                prev && JSON.stringify(prev) === JSON.stringify(found) ? prev : found
+              );
               setIsLoggedIn(true);
               if (found.role !== "ADMIN" && found.eventId) {
-                setActiveEventId(found.eventId);
+                setActiveEventId((prev) => (prev === found.eventId ? prev : found.eventId));
               }
             } else {
               setCurrentUserState(null);
@@ -854,16 +857,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           };
         }
 
-        // 출품 등록자의 소속 팀 정보도 함께 갱신
-        const updatedUser: User = {
-          ...currentUser,
-          teamId,
-          teamName: data.teamName,
-        };
-        setCurrentUserState(updatedUser);
-        const updatedUsers = allUsers.map((u) => (u.id === currentUser.id ? updatedUser : u));
-        setUsers(updatedUsers);
-        await dbInsertUser(updatedUser);
+        // 출품 등록자의 소속 팀 정보도 함께 갱신 (관리자는 여러 과정을 관리하므로 본인 팀 정보 변경 안 함)
+        let updatedUsers = allUsers;
+        if (!isAdmin) {
+          const updatedUser: User = {
+            ...currentUser,
+            teamId,
+            teamName: data.teamName,
+          };
+          setCurrentUserState(updatedUser);
+          updatedUsers = allUsers.map((u) => (u.id === currentUser.id ? updatedUser : u));
+          setUsers(updatedUsers);
+          await dbInsertUser(updatedUser);
+        }
 
         const updatedProjects = [newProject, ...allProjects];
         setProjects(updatedProjects);

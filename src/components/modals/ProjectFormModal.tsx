@@ -38,7 +38,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   onClose,
   editProject,
 }) => {
-  const { currentUser, users, roster, createProject, updateProject, deleteProject } = useApp();
+  const { currentUser, users, roster, event, createProject, updateProject, deleteProject } = useApp();
 
   const isEditing = Boolean(editProject);
 
@@ -107,8 +107,19 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const submitLockRef = useRef<boolean>(false);
+  // 폼 초기화는 "모달이 열릴 때" 또는 "수정 대상 프로젝트가 바뀔 때" 단 1회만 수행
+  // (백그라운드 동기화로 currentUser 객체가 갱신되어도 입력 중인 내용이 초기화되지 않도록 방지)
+  const initializedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!isOpen) {
+      initializedKeyRef.current = null;
+      return;
+    }
+    const initKey = editProject ? `edit:${editProject.id}` : "new";
+    if (initializedKeyRef.current === initKey) return;
+    initializedKeyRef.current = initKey;
+
     if (editProject) {
       setTitle(editProject.title);
       setTeamName(editProject.teamName);
@@ -240,7 +251,8 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       setMediaVideoFileName("");
     }
     setErrorMessage("");
-  }, [editProject, currentUser, isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editProject?.id, isOpen]);
 
   if (!isOpen) return null;
 
@@ -760,11 +772,15 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
           setErrorMessage(res.message);
         }
       } else {
+        const isAdminUser = currentUser?.role === "ADMIN";
         const res = await createProject({
-          eventId: "evt-2026-v2-01",
-          teamId: currentUser?.teamId || `team-${Date.now()}`,
+          eventId: event.id,
+          // 관리자는 여러 과정을 오가므로 기존 팀ID를 재사용하지 않고 항상 새 팀ID로 등록
+          teamId: !isAdminUser && currentUser?.teamId
+            ? currentUser.teamId
+            : `team-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           teamName: teamName.trim() || `${currentUser?.name || "학생"} 팀`,
-          teamNumber: 1,
+          teamNumber: 0,
           title: title.trim(),
           summary: summary.trim(),
           description: description.trim(),
