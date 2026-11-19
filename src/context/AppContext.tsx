@@ -44,6 +44,7 @@ interface AppContextType {
   createCourse: (courseData: Omit<Event, "id">) => Promise<{ success: boolean; course?: Event; message: string }>;
   updateCourse: (updates: Partial<Event>) => Promise<{ success: boolean; message: string }>;
   deleteCourse: (eventId: string) => Promise<{ success: boolean; message: string }>;
+  toggleCourseActive: (eventId: string, active?: boolean) => Promise<{ success: boolean; message: string }>;
   toggleCourseSwitch: (
     field: "isRegistrationOpen" | "isFundingOpen" | "isRankingPublic",
     value?: boolean
@@ -108,9 +109,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const pendingSyncRef = useRef<boolean>(false);
 
   // 현재 선택/접속된 과정(Event)
+  // 학생/심사위원은 반드시 본인 계정에 귀속된 과정(currentUser.eventId)만 표시되도록 고정
   const event: Event = useMemo(() => {
-    return events.find((e) => e.id === activeEventId) || events[0] || INITIAL_EVENT;
-  }, [events, activeEventId]);
+    const targetId =
+      currentUser && currentUser.role !== "ADMIN" && currentUser.eventId
+        ? currentUser.eventId
+        : activeEventId;
+    return events.find((e) => e.id === targetId) || events[0] || INITIAL_EVENT;
+  }, [events, activeEventId, currentUser]);
 
   // 브라우저 인터넷 탭 제목(document.title)을 현재 과정별 명칭으로 실시간 동기화
   useEffect(() => {
@@ -342,6 +348,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...courseData,
       id: `evt-v2-${Date.now().toString().slice(-6)}`,
       inviteCode: trimmedCode,
+      isCourseActive: courseData.isCourseActive ?? true,
       isRegistrationOpen: courseData.isRegistrationOpen ?? true,
       isFundingOpen: courseData.isFundingOpen ?? false,
       isRankingPublic: courseData.isRankingPublic ?? false,
@@ -426,6 +433,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     return { success: true, message: `[${target.name}] 과정이 삭제되었습니다.` };
+  };
+
+  // 관리자 기능: 여러 과정 동시 진행을 위한 과정별 활성화(ON/OFF) 체크 토글
+  const toggleCourseActive = async (
+    eventId: string,
+    active?: boolean
+  ): Promise<{ success: boolean; message: string }> => {
+    const target = events.find((e) => e.id === eventId);
+    if (!target) {
+      return { success: false, message: "해당 과정을 찾을 수 없습니다." };
+    }
+    const nextActive = active !== undefined ? active : !(target.isCourseActive !== false);
+    const updatedCourse: Event = {
+      ...target,
+      isCourseActive: nextActive,
+    };
+
+    const res = await dbUpdateEvent(updatedCourse);
+    if (!res.success) {
+      return { success: false, message: `과정 활성화 상태 저장 실패: ${res.error || "DB 오류"}` };
+    }
+
+    setEventsState((prev) => prev.map((e) => (e.id === eventId ? updatedCourse : e)));
+    return {
+      success: true,
+      message: nextActive
+        ? `🟢 [${updatedCourse.name}] (초대코드: ${updatedCourse.inviteCode}) 과정이 활성화되었습니다. 이제 이 초대코드로 회원가입 및 진행이 가능합니다.`
+        : `⚪ [${updatedCourse.name}] (초대코드: ${updatedCourse.inviteCode}) 과정이 비활성화되었습니다. 해당 초대코드로의 회원가입이 차단됩니다.`,
+    };
   };
 
   // 관리자 기능: 출품등록 / 펀딩진행 / 랭킹공개 토글 스위치 제어
@@ -552,6 +588,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       targetCourse?.id ||
       (targetUser.role !== "ADMIN" && targetUser.eventId ? targetUser.eventId : activeEventId);
 
+    const enteredCourse = events.find((e) => e.id === nextEventId) || event;
+
+    // 일반 참가자/심사위원은 소속 과정이 비활성화(isCourseActive === false)된 경우 입장 차단
+    if (targetUser.role !== "ADMIN" && enteredCourse && enteredCourse.isCourseActive === false) {
+      return {
+        success: false,
+        message: `현재 [${enteredCourse.name}] 과정(초대코드: ${enteredCourse.inviteCode})은 비활성화 상태입니다. 활성화된 과정만 입장할 수 있습니다.`,
+      };
+    }
+
     if (nextEventId && events.some((e) => e.id === nextEventId)) {
       setActiveEventId(nextEventId);
       try {
@@ -564,7 +610,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("mc_v2_logged_out");
     localStorage.setItem("mc_v2_current_user_id", targetUser.id);
 
-    const enteredCourse = events.find((e) => e.id === nextEventId) || event;
     return {
       success: true,
       message: `${targetUser.name}님 환영합니다! [${enteredCourse.name}] 과정으로 입장했습니다.`,
@@ -590,6 +635,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return {
         success: false,
         message: `유효하지 않은 과정 초대코드([${trimmedCode}])입니다. 운영진에게 초대코드 번호를 확인해 주세요.`,
+      };
+    }
+
+    // 비활성화된 과정의 초대코드로는 회원가입 차단
+    if (matchedCourse.isCourseActive === false) {
+      return {
+        success: false,
+        message: `입력하신 초대코드([${trimmedCode}])의 [${matchedCourse.name}] 과정은 현재 활성화되어 있지 않습니다. 활성화된 과정의 초대코드로만 회원가입이 가능합니다.`,
       };
     }
 
@@ -1282,6 +1335,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createCourse,
         updateCourse,
         deleteCourse,
+        toggleCourseActive,
         toggleCourseSwitch,
         findCourseByInviteCode,
         canStudentEditProject,

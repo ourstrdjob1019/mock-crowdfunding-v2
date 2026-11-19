@@ -218,6 +218,7 @@ export function mapDbEventToModel(row: any): Event {
     currentStage: stage,
     isRankingPublic: Boolean(row.is_ranking_public),
     inviteCode: meta.inviteCode !== undefined ? String(meta.inviteCode) : "2026",
+    isCourseActive: meta.isCourseActive !== undefined ? Boolean(meta.isCourseActive) : true,
     isRegistrationOpen: meta.isRegistrationOpen !== undefined ? Boolean(meta.isRegistrationOpen) : defaultRegOpen,
     isFundingOpen: meta.isFundingOpen !== undefined ? Boolean(meta.isFundingOpen) : defaultFundOpen,
     rankScoreTeamCount: Number(meta.rankScoreTeamCount) || 10,
@@ -233,6 +234,7 @@ export function mapModelEventToDb(event: Event): Record<string, any> {
   const cleanSession = (event.session || "2026 SPARK 창업챌린지").replace(EVENT_META_REGEX, "").trim();
   const meta = {
     inviteCode: (event.inviteCode || "2026").trim(),
+    isCourseActive: event.isCourseActive !== undefined ? Boolean(event.isCourseActive) : true,
     isRegistrationOpen: Boolean(event.isRegistrationOpen),
     isFundingOpen: Boolean(event.isFundingOpen),
     rankScoreTeamCount: Number(event.rankScoreTeamCount) || 10,

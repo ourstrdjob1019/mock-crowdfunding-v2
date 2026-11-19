@@ -12,6 +12,7 @@ export const INITIAL_EVENT: Event = {
   currentStage: "FUNDING_OPEN",
   isRankingPublic: false,
   inviteCode: "2026",
+  isCourseActive: true,
   isRegistrationOpen: true,
   isFundingOpen: true,
   rankScoreTeamCount: 10,

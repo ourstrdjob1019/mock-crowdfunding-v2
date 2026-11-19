@@ -12,6 +12,7 @@ export interface Event {
   currentStage: EventStage;
   isRankingPublic: boolean;
   inviteCode?: string; // 과정별 입장/가입 초대코드 (예: "2026", "1001")
+  isCourseActive?: boolean; // 과정 활성화 여부 (true인 초대코드만 회원가입/진행 가능, 여러 과정 동시 활성화 지원)
   isRegistrationOpen?: boolean; // 출품 등록 및 수정 허용 토글 스위치 (ON/OFF)
   isFundingOpen?: boolean; // 펀딩(모의투자) 진행 중 토글 스위치 (ON/OFF)
   rankScoreTeamCount?: number; // 10점 만점 등수 환산 기준 팀 수 (예: 5, 10, 20)

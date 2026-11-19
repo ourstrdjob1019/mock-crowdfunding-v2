@@ -43,6 +43,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     createCourse,
     updateCourse,
     deleteCourse,
+    toggleCourseActive,
     toggleCourseSwitch,
     setStage,
     projects,
@@ -431,6 +432,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       currentStage: "REGISTRATION",
       isRankingPublic: false,
       inviteCode: newCourseInviteCode.trim(),
+      isCourseActive: true,
       isRegistrationOpen: true,
       isFundingOpen: false,
       rankScoreTeamCount: 10,
@@ -1653,35 +1655,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* 우측 2칸: 개설된 전체 과정 카드 목록 */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-base">
-                운영 중인 전체 과정 목록 ({events.length}개)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                각 과정은 고유한 초대코드 번호로 구분되며, 출품작·참가자·투표 내역·토글 스위치가 과정별로 독립 운영됩니다.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  운영 중인 전체 과정 목록 ({events.length}개)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  각 과정 네모박스의 <strong>[과정 활성화 체크칸]</strong>을 체크하면 여러 과정을 동시에 진행할 수 있습니다. 체크된(활성화된) 초대코드로만 회원가입이 허용됩니다.
+                </p>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold shrink-0">
+                동시 활성화 중: {events.filter((e) => e.isCourseActive !== false).length}개 / 전체 {events.length}개
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {events.map((ev) => {
                 const isSelected = ev.id === event.id;
+                const isActiveCourse = ev.isCourseActive !== false;
                 return (
                   <div
                     key={ev.id}
                     className={`p-5 rounded-2xl border-2 transition-all flex flex-col justify-between gap-4 ${
                       isSelected
                         ? "border-blue-600 bg-blue-50/30 shadow-sm"
-                        : "border-slate-200 bg-white hover:border-slate-300"
+                        : isActiveCourse
+                        ? "border-emerald-300 bg-white hover:border-emerald-400"
+                        : "border-slate-200 bg-slate-50/70 opacity-85"
                     }`}
                   >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="space-y-3">
+                      {/* ★ 과정 네모박스 상단: 다중 과정 동시 진행용 활성화 체크박스 칸 */}
+                      <label
+                        className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                          isActiveCourse
+                            ? "bg-emerald-50/90 border-emerald-400 text-emerald-950 shadow-2xs"
+                            : "bg-slate-100 border-slate-300 text-slate-500"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isActiveCourse}
+                            onChange={async (e) => {
+                              const nextVal = e.target.checked;
+                              const res = await toggleCourseActive(ev.id, nextVal);
+                              showToast(res.message);
+                            }}
+                            className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-extrabold">
+                              {isActiveCourse ? "과정 활성화 (가입/진행 허용)" : "과정 비활성화 (회원가입 차단)"}
+                            </span>
+                            <span className="text-[10px] opacity-80">
+                              {isActiveCourse
+                                ? `초대코드 [${ev.inviteCode || "2026"}] 회원가입 가능`
+                                : `초대코드 [${ev.inviteCode || "2026"}] 회원가입 불가`}
+                            </span>
+                          </div>
+                        </div>
                         <span
-                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
-                            isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold shrink-0 ${
+                            isActiveCourse
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-300 text-slate-700"
                           }`}
                         >
-                          {isSelected ? "현재 선택된 과정" : "대기 과정"}
+                          {isActiveCourse ? "ACTIVE" : "OFF"}
+                        </span>
+                      </label>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                            isSelected
+                              ? "bg-blue-600 text-white"
+                              : isActiveCourse
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {isSelected
+                            ? "👁️ 현재 관리자 화면 조회 중"
+                            : isActiveCourse
+                            ? "🟢 동시 진행 중 (활성)"
+                            : "⚪ 비활성 대기"}
                         </span>
 
                         <button
@@ -1703,12 +1762,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       </div>
 
-                      <h4 className="font-extrabold text-slate-900 text-base">{ev.name}</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {ev.institution} · {ev.session}
-                      </p>
+                      <div>
+                        <h4 className="font-extrabold text-slate-900 text-base">{ev.name}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {ev.institution} · {ev.session}
+                        </p>
+                      </div>
 
-                      <div className="flex flex-wrap gap-1.5 mt-3">
+                      <div className="flex flex-wrap gap-1.5">
                         <span
                           className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                             ev.isRegistrationOpen
@@ -1741,14 +1802,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="button"
                           onClick={() => {
                             selectCourse(ev.id);
-                            showToast(`📂 [${ev.name}] 과정으로 전환되었습니다.`);
+                            showToast(`📂 [${ev.name}] 과정 관리 화면으로 전환되었습니다.`);
                           }}
                           className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
                         >
-                          이 과정으로 전환
+                          이 과정 화면 조회/관리
                         </button>
                       ) : (
-                        <span className="text-xs font-extrabold text-blue-700">● 현재 관제 중인 과정</span>
+                        <span className="text-xs font-extrabold text-blue-700">● 현재 관제 화면에 표시 중</span>
                       )}
 
                       {events.length > 1 && (

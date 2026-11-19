@@ -87,6 +87,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
+        {/* 1-2. 현재 진행 중인 과정명 고정 배너 */}
+        <div className="rounded-xl bg-slate-900 text-white px-3.5 py-2.5 border border-slate-800 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-[10px] font-mono text-cyan-300">
+            <span className="flex items-center gap-1.5 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              현재 참여 과정
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-white/10 text-amber-300 font-bold">
+              코드: {event.inviteCode || "2026"}
+            </span>
+          </div>
+          <div className="text-xs font-extrabold text-white leading-snug line-clamp-2 break-keep">
+            {event.name}
+          </div>
+        </div>
+
         {/* 2. Bento Wallet Card */}
         <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs relative overflow-hidden group hover:border-blue-300 transition-colors">
           <div className="absolute -top-12 -right-12 w-28 h-28 bg-blue-100 rounded-full blur-2xl opacity-60 pointer-events-none"></div>

@@ -100,7 +100,7 @@ function MainDashboard() {
               <Menu className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] sm:text-xs font-semibold">
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] sm:text-xs font-semibold shrink-0">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
@@ -114,16 +114,16 @@ function MainDashboard() {
                 value={event.id}
                 onChange={(e) => selectCourse(e.target.value)}
                 aria-label="운영 과정 선택"
-                className="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-xs font-bold border border-slate-700 cursor-pointer max-w-[180px] sm:max-w-[260px] truncate"
+                className="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-xs font-bold border border-slate-700 cursor-pointer max-w-[190px] sm:max-w-[300px] truncate"
               >
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>
-                    [{ev.inviteCode || "2026"}] {ev.name}
+                    {ev.isCourseActive !== false ? "🟢" : "⚪"} [{ev.inviteCode || "2026"}] {ev.name}
                   </option>
                 ))}
               </select>
             ) : (
-              <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 truncate max-w-[240px]">
+              <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-slate-900 text-white text-xs font-bold border border-slate-800 truncate max-w-[180px] sm:max-w-[320px] shadow-2xs">
                 <span className="truncate">{event.name}</span>
               </div>
             )}
@@ -227,17 +227,25 @@ function MainDashboard() {
                   <div className="absolute bottom-0 left-1/3 w-60 h-60 bg-cyan-500/15 rounded-full blur-2xl pointer-events-none" />
 
                   <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5 sm:gap-6">
-                    <div className="max-w-xl space-y-2">
-                      <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] sm:text-xs text-cyan-300 font-medium">
+                    <div className="max-w-2xl space-y-2.5">
+                      <div className="inline-flex flex-wrap items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] sm:text-xs text-cyan-300 font-semibold">
                         <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                        <span>{event.name} {event.session ? `· ${event.session}` : ""}</span>
+                        <span>
+                          현재 진행 과정 · {event.institution || "창업교육센터"}
+                          {event.session ? ` · ${event.session}` : ""} (초대코드: {event.inviteCode || "2026"})
+                        </span>
                       </div>
-                      <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
-                        미래를 이끌 청년 창업팀에게<br className="hidden sm:inline" />
-                        당신의 모의투자 크레딧을 베팅하세요
+                      <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white leading-snug break-keep">
+                        {event.name}
                       </h1>
-                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed pt-1">
-                        모든 참여자에게 <span className="text-amber-400 font-mono font-bold">{event.baseCredit.toLocaleString()} CR</span> 기본 지급. 건당 <span className="text-cyan-300 font-mono font-bold">{event.minInvestment.toLocaleString()} ~ {event.maxInvestment.toLocaleString()} CR</span> 분산 투자 가능하며, 실시간 펀딩 점수는 심사 평가에 자동 반영됩니다.
+                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed pt-0.5">
+                        미래를 이끌 창업팀에게 당신의 모의투자 크레딧을 베팅하세요. 모든 참여자에게{" "}
+                        <span className="text-amber-400 font-mono font-bold">{event.baseCredit.toLocaleString()} CR</span>{" "}
+                        기본 지급 · 건당{" "}
+                        <span className="text-cyan-300 font-mono font-bold">
+                          {event.minInvestment.toLocaleString()} ~ {event.maxInvestment.toLocaleString()} CR
+                        </span>{" "}
+                        분산 투자 가능.
                       </p>
                     </div>
 

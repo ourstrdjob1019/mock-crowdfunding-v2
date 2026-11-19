@@ -68,6 +68,14 @@ export const AuthScreen: React.FC = () => {
       setErrorMessage("참여하실 과정의 초대코드 번호를 입력해 주세요.");
       return;
     }
+    if (!matchedRegCourse) {
+      setErrorMessage(`입력하신 초대코드([${regInviteCode.trim()}])는 유효하지 않은 초대코드입니다. 운영진에게 초대코드 번호를 확인해 주세요.`);
+      return;
+    }
+    if (matchedRegCourse.isCourseActive === false) {
+      setErrorMessage(`입력하신 초대코드([${regInviteCode.trim()}])의 [${matchedRegCourse.name}] 과정은 현재 비활성화 상태입니다. 활성화된 초대코드만 회원가입이 가능합니다.`);
+      return;
+    }
     if (!regEmail.trim()) {
       setErrorMessage("사용하실 아이디(또는 이메일)를 입력해 주세요.");
       return;
@@ -98,7 +106,8 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
-  const displayCourse = matchedLoginCourse || matchedRegCourse || event;
+  // 입력한 초대코드에 해당하는 과정만 상단 헤더에 표시 (미입력 시 다른 과정명이 잘못 뜨지 않도록 방지)
+  const previewCourse = mode === "login" ? matchedLoginCourse : matchedRegCourse;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col justify-between relative overflow-hidden py-10 px-4 sm:px-6">
@@ -111,15 +120,31 @@ export const AuthScreen: React.FC = () => {
           <Sparkles size={22} />
         </div>
         <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-          레디스타트업 V2
+          {previewCourse && previewCourse.isCourseActive !== false
+            ? previewCourse.name
+            : "레디스타트업 V2"}
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-          클라우드펀딩 플랫폼 · {displayCourse.name}
+          {previewCourse
+            ? previewCourse.isCourseActive !== false
+              ? `${previewCourse.institution} · ${previewCourse.session}`
+              : `⛔ 비활성화된 과정 (${previewCourse.name})`
+            : "과정별 초대코드를 입력하면 해당 교육/대회 과정으로 연결됩니다"}
         </p>
 
         <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80 text-[11px] font-mono font-medium text-slate-600">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          {displayCourse.institution} · 시스템 가동 중
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              previewCourse && previewCourse.isCourseActive === false
+                ? "bg-rose-500"
+                : "bg-emerald-500"
+            }`}
+          />
+          {previewCourse
+            ? previewCourse.isCourseActive !== false
+              ? `활성 과정 확인됨 (초대코드: ${previewCourse.inviteCode})`
+              : `비활성 과정 (회원가입 불가)`
+            : "모의 크라우드펀딩 멀티 과정 운영 시스템"}
         </div>
       </header>
 
@@ -187,10 +212,17 @@ export const AuthScreen: React.FC = () => {
                 </div>
                 {loginInviteCode.trim() && (
                   matchedLoginCourse ? (
-                    <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                      <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                      <span>확인됨: {matchedLoginCourse.name} ({matchedLoginCourse.institution})</span>
-                    </p>
+                    matchedLoginCourse.isCourseActive !== false ? (
+                      <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                        <span>확인됨: {matchedLoginCourse.name} ({matchedLoginCourse.institution})</span>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                        <AlertCircle size={13} className="text-rose-600 shrink-0" />
+                        <span>현재 활성화되지 않은 과정({matchedLoginCourse.name})입니다.</span>
+                      </p>
+                    )
                   ) : (
                     <p className="text-[11px] text-rose-600 font-medium">
                       일치하는 과정 초대코드가 없습니다. 번호를 다시 확인해 주세요.
@@ -266,10 +298,19 @@ export const AuthScreen: React.FC = () => {
                 </div>
                 {regInviteCode.trim() ? (
                   matchedRegCourse ? (
-                    <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                      <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                      <span>입장 과정: {matchedRegCourse.name} ({matchedRegCourse.baseCredit.toLocaleString()} CR 지급)</span>
-                    </p>
+                    matchedRegCourse.isCourseActive !== false ? (
+                      <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                        <span>입장 과정(활성): {matchedRegCourse.name} ({matchedRegCourse.baseCredit.toLocaleString()} CR 지급)</span>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-rose-600 font-bold flex items-start gap-1">
+                        <AlertCircle size={13} className="text-rose-600 shrink-0 mt-0.5" />
+                        <span>
+                          [{matchedRegCourse.name}] 과정은 현재 활성화되지 않은 초대코드입니다. 활성화된 과정의 초대코드로만 회원가입할 수 있습니다.
+                        </span>
+                      </p>
+                    )
                   ) : (
                     <p className="text-[11px] text-rose-600 font-medium">
                       유효하지 않은 초대코드입니다. 운영진에게 초대코드 번호를 확인해 주세요.
@@ -277,7 +318,7 @@ export const AuthScreen: React.FC = () => {
                   )
                 ) : (
                   <p className="text-[11px] text-slate-500">
-                    초대코드 번호를 입력하면 해당 교육/대회 과정으로 자동 연결됩니다.
+                    활성화된 과정의 초대코드 번호를 입력하면 해당 교육/대회 과정으로 자동 연결됩니다.
                   </p>
                 )}
               </div>
@@ -444,7 +485,7 @@ export const AuthScreen: React.FC = () => {
       {/* 하단 푸터 */}
       <footer className="relative z-10 max-w-md w-full mx-auto text-center py-4">
         <p className="text-[11px] font-mono text-slate-400">
-          © 2026 {displayCourse.institution} · 모의 크라우드펀딩 평가 시스템 V2
+          © 2026 {previewCourse?.institution || "레디스타트업"} · 모의 크라우드펀딩 평가 시스템 V2
         </p>
       </footer>
     </div>
