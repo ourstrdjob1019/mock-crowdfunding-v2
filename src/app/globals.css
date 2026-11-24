@@ -199,3 +199,19 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
+
+/* =========================================================================
+   출품작 저작권 및 개인 자료 보호 스타일 (인쇄/PDF 저장, 모바일 길게 누르기, 드래그 차단)
+   ========================================================================= */
+.protected-media {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+}
+
+@media print {
+  body {
+    display: none !important;
+  }
+}

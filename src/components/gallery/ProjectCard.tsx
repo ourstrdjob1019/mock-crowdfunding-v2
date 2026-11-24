@@ -39,15 +39,20 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:-translate-y-1 hover:shadow-lg transition-all duration-200 flex flex-col group">
       
-      {/* 16:9 Thumbnail with Zoom */}
+      {/* 16:9 Thumbnail with Zoom & Anti-Drag/Right-Click Protection */}
       <div 
-        className="relative aspect-16/9 overflow-hidden bg-slate-100 cursor-pointer" 
+        className="relative aspect-16/9 overflow-hidden bg-slate-100 cursor-pointer select-none protected-media" 
         onClick={() => onSelect(project)}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
       >
         <img
           src={project.thumbnailUrl}
           alt={project.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none protected-media"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 

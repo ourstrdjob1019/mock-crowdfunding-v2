@@ -8,29 +8,44 @@ import {
   ZoomOut,
   Maximize2,
   ExternalLink,
-  Download,
   FileText,
   Layers,
   ScrollText,
   AlertCircle,
   Loader2,
-  RotateCw,
+  Lock,
 } from "lucide-react";
 
 interface PdfDetailViewerProps {
   url: string;
   title?: string;
   className?: string;
+  projectId?: string;
+  itemId?: string;
+  isFullScreenPage?: boolean;
 }
 
-export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", className = "" }: PdfDetailViewerProps) {
+export function PdfDetailViewer({
+  url,
+  title = "출품 IR 피치덱 (PDF)",
+  className = "",
+  projectId,
+  itemId,
+  isFullScreenPage = false,
+}: PdfDetailViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [scale, setScale] = useState<number>(1.2);
+  const [scale, setScale] = useState<number>(isFullScreenPage ? 1.3 : 1.2);
   const [viewMode, setViewMode] = useState<"single" | "scroll">("single"); // 'single' = 한페이지씩, 'scroll' = 세로 스크롤
   const [loading, setLoading] = useState<boolean>(true);
   const [rendering, setRendering] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [securityNotice, setSecurityNotice] = useState<string | null>(null);
+
+  const triggerSecurityNotice = () => {
+    setSecurityNotice("🔒 개인 자료 및 저작권 보호를 위해 PDF 다운로드 및 우클릭 저장이 제한됩니다.");
+    setTimeout(() => setSecurityNotice(null), 2600);
+  };
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -218,13 +233,34 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
 
         const canvas = document.createElement("canvas");
         canvas.className =
-          "rounded-xl shadow-md border border-slate-200 bg-white max-w-full transition-transform duration-200";
+          "rounded-xl shadow-md border border-slate-200 bg-white max-w-full transition-transform duration-200 protected-media pointer-events-none";
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         canvas.style.width = `${viewport.width / dpr}px`;
         canvas.style.height = `${viewport.height / dpr}px`;
+        canvas.oncontextmenu = (ev) => {
+          ev.preventDefault();
+          return false;
+        };
+        canvas.ondragstart = (ev) => {
+          ev.preventDefault();
+          return false;
+        };
+
+        // 투명 보안 실드 (우클릭 이미지 저장 및 드래그 추출 원천 차단)
+        const shield = document.createElement("div");
+        shield.className = "absolute inset-0 z-10 select-none";
+        shield.oncontextmenu = (ev) => {
+          ev.preventDefault();
+          return false;
+        };
+        shield.ondragstart = (ev) => {
+          ev.preventDefault();
+          return false;
+        };
 
         pageWrapper.appendChild(canvas);
+        pageWrapper.appendChild(shield);
         container.appendChild(pageWrapper);
 
         const context = canvas.getContext("2d");
@@ -257,8 +293,25 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [viewMode, numPages]);
 
+  const secureNewTabHref = projectId
+    ? `/view?id=${encodeURIComponent(projectId)}&type=PDF&itemId=${encodeURIComponent(itemId || "")}`
+    : null;
+
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs flex flex-col ${className}`}>
+    <div
+      onContextMenu={(e) => {
+        e.preventDefault();
+        triggerSecurityNotice();
+      }}
+      onDragStart={(e) => e.preventDefault()}
+      className={`rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs flex flex-col select-none protected-media relative ${className}`}
+    >
+      {securityNotice && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-slate-900/95 text-white border border-slate-700 shadow-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap">
+          <span>{securityNotice}</span>
+        </div>
+      )}
+
       {/* 1. 상단 메인 컨트롤 바 */}
       <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-800">
         {/* 문서 타이틀 & 뱃지 */}
@@ -274,6 +327,9 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
                   {numPages}P
                 </span>
               )}
+              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono border border-amber-500/30">
+                <Lock className="w-2.5 h-2.5" /> 다운로드 방지됨
+              </span>
             </div>
           </div>
         </div>
@@ -306,10 +362,10 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
           </button>
         </div>
 
-        {/* 우측 도구: 줌 & 새 탭 열기 */}
+        {/* 우측 도구: 줌 & 보안 새 창 열기 (원본 다운로드 링크 제거) */}
         <div className="flex items-center gap-1.5">
           {/* 확대/축소 */}
-          <div className="hidden sm:flex items-center bg-slate-800 rounded-lg border border-slate-700 px-1 py-0.5 text-xs text-slate-300">
+          <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700 px-1 py-0.5 text-xs text-slate-300">
             <button
               type="button"
               onClick={() => setScale((s) => Math.max(0.8, Number((s - 0.2).toFixed(1))))}
@@ -323,7 +379,7 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
             </span>
             <button
               type="button"
-              onClick={() => setScale((s) => Math.min(2.0, Number((s + 0.2).toFixed(1))))}
+              onClick={() => setScale((s) => Math.min(2.2, Number((s + 0.2).toFixed(1))))}
               title="확대"
               className="p-1 hover:text-white transition cursor-pointer"
             >
@@ -331,17 +387,19 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
             </button>
           </div>
 
-          {/* 원본 새 탭 열기 */}
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="새 창에서 원본 열기 / 다운로드"
-            className="px-2.5 py-1.2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">새 탭 열기</span>
-          </a>
+          {/* 보안 전체화면 새 창 열기 (원본 PDF URL 노출 및 다운로드 원천 차단) */}
+          {!isFullScreenPage && secureNewTabHref && (
+            <a
+              href={secureNewTabHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="보안 뷰어 새 창에서 크게 보기 (다운로드 불가)"
+              className="px-2.5 py-1.2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">새 창 크게 보기</span>
+            </a>
+          )}
         </div>
       </div>
 
@@ -388,53 +446,40 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
       )}
 
       {/* 3. 본문 뷰어 영역 */}
-      <div className="relative min-h-[500px] sm:min-h-[680px] bg-slate-100/70 p-3 sm:p-6 flex flex-col items-center justify-center overflow-auto max-h-[75vh]">
+      <div
+        className={`relative bg-slate-100/70 p-3 sm:p-6 flex flex-col items-center justify-center overflow-auto ${
+          isFullScreenPage ? "flex-1 min-h-[calc(100vh-110px)]" : "min-h-[500px] sm:min-h-[680px] max-h-[75vh]"
+        }`}
+      >
         {/* 로딩 상태 */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-3">
             <Loader2 className="w-9 h-9 animate-spin text-indigo-600" />
-            <p className="text-sm font-semibold text-slate-700">PDF 상세페이지 문서를 고해상도로 변환 중입니다...</p>
+            <p className="text-sm font-semibold text-slate-700">PDF 상세페이지 문서를 보안 캔버스로 변환 중입니다...</p>
             <p className="text-xs text-slate-400">페이지가 많을 경우 잠시 기다려주세요.</p>
           </div>
         )}
 
-        {/* 에러 또는 CORS 차단 시: 깔끔한 폴백 iframe 및 다운로드 가이드 */}
+        {/* 에러 또는 CORS 차단 시: 다운로드 툴바가 숨겨진 보안 내장 뷰어 폴백 */}
         {error && !loading && (
-          <div className="w-full max-w-xl mx-auto p-6 rounded-2xl bg-white border border-amber-200 shadow-sm space-y-4 text-center my-8">
+          <div className="w-full max-w-2xl mx-auto p-6 rounded-2xl bg-white border border-amber-200 shadow-sm space-y-4 text-center my-4">
             <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center">
               <AlertCircle className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="font-bold text-slate-800 text-base">외부 보안 정책으로 인한 캔버스 변환 안내</h4>
+              <h4 className="font-bold text-slate-800 text-base">보안 내장 뷰어 모드로 표시됩니다</h4>
               <p className="text-xs text-slate-500 mt-1">
-                타 서버에서 제공하는 PDF의 경우 브라우저 보안(CORS)으로 인해 전용 뷰어 대신 내장 뷰어로 자동 전환됩니다.
+                외부 서버 보안 정책(CORS)으로 인해 다운로드 및 인쇄가 비활성화된 내장 보안 뷰어로 표시합니다.
               </p>
             </div>
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
-              >
-                <ExternalLink className="w-4 h-4" />
-                <span>새 창에서 원본 PDF 보기</span>
-              </a>
-              <button
-                type="button"
-                onClick={() => setError(null)}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
-              >
-                기본 내장 뷰어로 보기
-              </button>
-            </div>
 
-            {/* 내장 iframe fallback */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            {/* 내장 iframe fallback (toolbar=0으로 다운로드/인쇄 바 숨김) */}
+            <div className="mt-3 pt-3 border-t border-slate-100 relative">
               <iframe
-                src={`${url}#toolbar=0&navpanes=0`}
-                title="PDF Document Fallback"
-                className="w-full h-[450px] rounded-xl border border-slate-200 bg-white"
+                src={`${url}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
+                title="PDF Document Secure Fallback"
+                className="w-full h-[520px] rounded-xl border border-slate-200 bg-white"
+                sandbox="allow-scripts allow-same-origin"
               />
             </div>
           </div>
@@ -449,9 +494,22 @@ export function PdfDetailViewer({ url, title = "출품 IR 피치덱 (PDF)", clas
               </div>
             )}
             
-            {/* 캔버스 상세페이지 카드 */}
-            <div className="rounded-xl overflow-hidden shadow-xl border border-slate-200/80 bg-white transition-all duration-200">
-              <canvas ref={canvasRef} className="block mx-auto max-w-full h-auto" />
+            {/* 캔버스 상세페이지 카드 + 투명 우클릭/드래그 차단 실드 */}
+            <div className="relative rounded-xl overflow-hidden shadow-xl border border-slate-200/80 bg-white transition-all duration-200">
+              <canvas
+                ref={canvasRef}
+                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={(e) => e.preventDefault()}
+                className="block mx-auto max-w-full h-auto pointer-events-none protected-media"
+              />
+              <div
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerSecurityNotice();
+                }}
+                onDragStart={(e) => e.preventDefault()}
+                className="absolute inset-0 z-10 select-none"
+              />
             </div>
           </div>
         )}

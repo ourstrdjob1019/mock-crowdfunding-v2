@@ -40,6 +40,40 @@ const getYouTubeEmbedUrl = (url?: string): string | null => {
   return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=0&rel=0` : null;
 };
 
+/**
+ * 업로드된 HTML(srcDoc) 내부에 우클릭/드래그/저장·인쇄·소스보기 단축키 차단 스크립트 자동 주입
+ */
+export const injectHtmlProtection = (rawHtml?: string): string => {
+  if (!rawHtml) return "";
+  const guardSnippet = `
+<style>
+  * { -webkit-touch-callout: none !important; }
+  img, video, canvas { -webkit-user-drag: none !important; user-select: none !important; }
+  @media print { body { display: none !important; } }
+</style>
+<script>
+(function(){
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, true);
+  document.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
+  document.addEventListener('keydown', function(e){
+    var k = (e.key || '').toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'p' || k === 'u')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && (k === 'i' || k === 'c' || k === 'j'))) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+})();
+</script>`;
+  if (rawHtml.includes("</head>")) {
+    return rawHtml.replace("</head>", `${guardSnippet}</head>`);
+  }
+  return `${guardSnippet}${rawHtml}`;
+};
+
 interface ProjectDetailModalProps {
   project: Project | null;
   onClose: () => void;
@@ -111,6 +145,22 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
         })
         .catch((err) => console.warn("HTML Storage fetch fallback:", err));
     });
+  }, [project]);
+
+  // 상세 모달 열람 중 Ctrl+S(저장), Ctrl+P(인쇄/PDF저장), Ctrl+U(소스보기) 단축키 차단
+  useEffect(() => {
+    if (!project) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const k = (e.key || "").toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && (k === "s" || k === "p" || k === "u")) {
+        e.preventDefault();
+        e.stopPropagation();
+        setToastNotice("🔒 개인 자료 및 저작권 보호를 위해 저장·인쇄가 제한됩니다.");
+        setTimeout(() => setToastNotice(null), 2800);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [project]);
 
   if (!project || !currentUser) return null;
@@ -466,14 +516,42 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
                       {/* A. IMAGE */}
                       {item.type === "IMAGE" && (
-                        <div className="space-y-3 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 p-2">
+                        <div className="space-y-2 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 p-2 protected-media">
+                          <div className="flex items-center justify-between px-2 py-1 text-xs">
+                            <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                              <Lock className="w-3 h-3 text-amber-600" />
+                              우클릭 및 이미지 드래그 저장 방지 적용됨
+                            </span>
+                            <a
+                              href={`/view?id=${encodeURIComponent(project.id)}&type=IMAGE&itemId=${encodeURIComponent(item.id || "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-semibold flex items-center gap-1 shrink-0"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>보안 새 창 크게 보기</span>
+                            </a>
+                          </div>
                           {(item.images && item.images.length > 0 ? item.images : [item.url]).map((imgUrl, imgIdx) => (
-                            <div key={imgIdx} className="relative rounded-xl overflow-hidden shadow-2xs">
+                            <div
+                              key={imgIdx}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                showToast("🔒 저작권 보호를 위해 이미지 우클릭 및 저장이 제한됩니다.");
+                              }}
+                              onDragStart={(e) => e.preventDefault()}
+                              className="relative rounded-xl overflow-hidden shadow-2xs select-none"
+                            >
                               <img
                                 src={imgUrl}
                                 alt={`상세 ${imgIdx + 1}`}
-                                className="w-full object-cover"
+                                draggable={false}
+                                onContextMenu={(e) => e.preventDefault()}
+                                onDragStart={(e) => e.preventDefault()}
+                                className="w-full object-cover pointer-events-none protected-media"
                               />
+                              {/* 투명 보호 레이어: 드래그 추출 및 우클릭 이미지 저장 차단 */}
+                              <div className="absolute inset-0 z-10 select-none" />
                             </div>
                           ))}
                         </div>
@@ -484,7 +562,9 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                         <div className="w-full">
                           <PdfDetailViewer
                             url={item.url}
-                            title={`${project.title} - 피치덱 PDF`}
+                            title={item.title || `${project.title} - 피치덱 PDF`}
+                            projectId={project.id}
+                            itemId={item.id}
                           />
                         </div>
                       )}
@@ -500,19 +580,19 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                               item.url?.toLowerCase().endsWith(".html") ||
                               item.url?.toLowerCase().endsWith(".htm")
                           );
-                          const openInNewTabHref = isUploadedHtml
-                            ? `/view?id=${encodeURIComponent(project.id)}&itemId=${encodeURIComponent(item.id || "")}&url=${encodeURIComponent(item.url || "")}`
-                            : formatWebUrl(item.url);
+                          // 원본 Storage URL을 주소창에 노출하지 않고 보안 뷰어(/view)로만 연결
+                          const openInNewTabHref = `/view?id=${encodeURIComponent(project.id)}&type=HTML&itemId=${encodeURIComponent(item.id || "")}`;
 
                           return (
                             <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
                               <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
-                                <span className="font-mono text-slate-600 truncate">
+                                <span className="font-mono text-slate-600 truncate flex items-center gap-1.5">
+                                  <Lock className="w-3 h-3 text-amber-600 shrink-0" />
                                   {item.fileName
-                                    ? `HTML 파일: ${item.fileName}`
+                                    ? `HTML 시연: ${item.fileName}`
                                     : isUploadedHtml
-                                    ? "업로드된 HTML 웹 시연 파일"
-                                    : formatWebUrl(item.url)}
+                                    ? "업로드된 HTML 웹 시연 (보안 뷰어)"
+                                    : "웹 시연 페이지 (보안 뷰어)"}
                                 </span>
                                 {(item.url || item.htmlContent) && (
                                   <a
@@ -522,7 +602,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                     className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1 shadow-2xs shrink-0"
                                   >
                                     <ExternalLink className="w-3.5 h-3.5" />
-                                    <span>새 창 열기</span>
+                                    <span>보안 새 창 열기</span>
                                   </a>
                                 )}
                               </div>
@@ -530,17 +610,17 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                 <div className="relative w-full h-[500px] sm:h-[620px] rounded-xl overflow-hidden border border-slate-200 bg-white shadow-inner">
                                   {item.htmlContent || fetchedHtmlMap[item.url] ? (
                                     <iframe
-                                      srcDoc={item.htmlContent || fetchedHtmlMap[item.url]}
+                                      srcDoc={injectHtmlProtection(item.htmlContent || fetchedHtmlMap[item.url])}
                                       title={`${project.title} Uploaded HTML`}
                                       className="w-full h-full border-0"
-                                      sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                                      sandbox="allow-scripts allow-forms allow-modals"
                                     />
                                   ) : (
                                     <iframe
                                       src={formatWebUrl(item.url)}
                                       title={`${project.title} Web Prototype`}
                                       className="w-full h-full border-0"
-                                      sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+                                      sandbox="allow-scripts allow-forms allow-same-origin"
                                     />
                                   )}
                                 </div>
@@ -551,7 +631,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
                       {/* D. VIDEO */}
                       {item.type === "VIDEO" && (
-                        <div className="rounded-2xl border border-slate-200 bg-black overflow-hidden shadow-md">
+                        <div
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            showToast("🔒 저작권 보호를 위해 동영상 다운로드 및 우클릭이 제한됩니다.");
+                          }}
+                          className="rounded-2xl border border-slate-200 bg-black overflow-hidden shadow-md protected-media"
+                        >
                           {getYouTubeEmbedUrl(item.url) ? (
                             <div className="relative w-full aspect-video">
                               <iframe
@@ -566,17 +652,32 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                             <video
                               src={item.url}
                               controls
+                              controlsList="nodownload noplaybackrate"
+                              disablePictureInPicture
+                              onContextMenu={(e) => e.preventDefault()}
+                              onDragStart={(e) => e.preventDefault()}
                               playsInline
                               preload="metadata"
-                              className="w-full max-h-[500px] object-contain mx-auto"
+                              className="w-full max-h-[500px] object-contain mx-auto protected-media"
                             />
                           )}
-                          <div className="bg-slate-900 px-4 py-2 text-[11px] text-slate-400 flex items-center justify-between">
-                            <span className="flex items-center gap-1.5 text-white font-medium">
-                              <Play className="w-3 h-3 text-rose-500 fill-rose-500" />
-                              {item.fileName || "프로젝트 소개 영상"}
+                          <div className="bg-slate-900 px-4 py-2 text-[11px] text-slate-400 flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 text-white font-medium truncate">
+                              <Play className="w-3 h-3 text-rose-500 fill-rose-500 shrink-0" />
+                              <span className="truncate">{item.fileName || "프로젝트 소개 영상"}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono shrink-0">
+                                다운로드 금지
+                              </span>
                             </span>
-                            <span className="font-mono text-slate-500">VIDEO PLAYER</span>
+                            <a
+                              href={`/view?id=${encodeURIComponent(project.id)}&type=VIDEO&itemId=${encodeURIComponent(item.id || "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-semibold flex items-center gap-1 shrink-0"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>보안 새 창 보기</span>
+                            </a>
                           </div>
                         </div>
                       )}
@@ -598,10 +699,23 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
                   {/* 구버전 이미지 */}
                   {project.landingFormat === "IMAGE" && (
-                    <div className="space-y-3 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 p-2">
+                    <div className="space-y-3 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 p-2 protected-media">
                       {detailImages.map((imgUrl, idx) => (
-                        <div key={idx} className="relative rounded-xl overflow-hidden shadow-2xs">
-                          <img src={imgUrl} alt={`상세 ${idx + 1}`} className="w-full object-cover" />
+                        <div
+                          key={idx}
+                          onContextMenu={(e) => e.preventDefault()}
+                          onDragStart={(e) => e.preventDefault()}
+                          className="relative rounded-xl overflow-hidden shadow-2xs select-none"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`상세 ${idx + 1}`}
+                            draggable={false}
+                            onContextMenu={(e) => e.preventDefault()}
+                            onDragStart={(e) => e.preventDefault()}
+                            className="w-full object-cover pointer-events-none protected-media"
+                          />
+                          <div className="absolute inset-0 z-10 select-none" />
                         </div>
                       ))}
                     </div>
@@ -611,7 +725,11 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   {project.landingFormat === "PDF" && (
                     <div className="w-full">
                       {project.landingUrl ? (
-                        <PdfDetailViewer url={project.landingUrl} title={`${project.title} - 출품 IR 피치덱`} />
+                        <PdfDetailViewer
+                          url={project.landingUrl}
+                          title={`${project.title} - 출품 IR 피치덱`}
+                          projectId={project.id}
+                        />
                       ) : null}
                     </div>
                   )}
@@ -620,21 +738,14 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   {(project.landingFormat === "WEB" || project.landingFormat === "HTML") &&
                     (() => {
                       const rawUrl = project.landingUrl || project.webDemoUrl || "";
-                      const isUploadedHtml = Boolean(
-                        fetchedHtmlMap[rawUrl] ||
-                          rawUrl.includes("/storage/v1/object/public/") ||
-                          rawUrl.toLowerCase().endsWith(".html") ||
-                          rawUrl.toLowerCase().endsWith(".htm")
-                      );
-                      const openHref = isUploadedHtml
-                        ? `/view?id=${encodeURIComponent(project.id)}`
-                        : formatWebUrl(rawUrl);
+                      const openHref = `/view?id=${encodeURIComponent(project.id)}&type=HTML`;
 
                       return (
                         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
                           <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
-                            <span className="font-mono text-slate-700 truncate">
-                              {isUploadedHtml ? "업로드된 HTML 웹 시연 파일" : formatWebUrl(rawUrl)}
+                            <span className="font-mono text-slate-700 truncate flex items-center gap-1.5">
+                              <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                              웹 시연 화면 (보안 뷰어)
                             </span>
                             {rawUrl && (
                               <a
@@ -644,24 +755,24 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                 className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1 shrink-0"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
-                                <span>새 창 열기</span>
+                                <span>보안 새 창 열기</span>
                               </a>
                             )}
                           </div>
                           <div className="p-2 sm:p-3">
                             {fetchedHtmlMap[rawUrl] ? (
                               <iframe
-                                srcDoc={fetchedHtmlMap[rawUrl]}
+                                srcDoc={injectHtmlProtection(fetchedHtmlMap[rawUrl])}
                                 title={`${project.title} Uploaded HTML`}
                                 className="w-full h-[550px] border-0 rounded-xl"
-                                sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                                sandbox="allow-scripts allow-forms allow-modals"
                               />
                             ) : (
                               <iframe
                                 src={formatWebUrl(rawUrl)}
                                 title={`${project.title} Web Prototype`}
                                 className="w-full h-[550px] border-0 rounded-xl"
-                                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                                sandbox="allow-scripts allow-same-origin allow-forms"
                               />
                             )}
                           </div>
