@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { EventStage, Project, User, UserRole } from "@/types";
+import { EventStage, Project, User, UserRole, DEFAULT_PROJECT_CATEGORIES } from "@/types";
 import {
   Download,
   Tv,
@@ -106,11 +106,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newCourseSession, setNewCourseSession] = useState<string>("2026 정규 세션");
   const [newCourseInviteCode, setNewCourseInviteCode] = useState<string>("");
   const [newCourseBaseCredit, setNewCourseBaseCredit] = useState<number>(10000);
+  const [newCategoryMode, setNewCategoryMode] = useState<"DEFAULT" | "CUSTOM">("DEFAULT");
+  const [newCustomCategories, setNewCustomCategories] = useState<string[]>([
+    ...DEFAULT_PROJECT_CATEGORIES,
+  ]);
+  const [newCategoryInput, setNewCategoryInput] = useState<string>("");
 
   const [editCourseName, setEditCourseName] = useState<string>(event.name);
   const [editCourseInstitution, setEditCourseInstitution] = useState<string>(event.institution || "");
   const [editCourseSession, setEditCourseSession] = useState<string>(event.session);
   const [editCourseInviteCode, setEditCourseInviteCode] = useState<string>(event.inviteCode || "2026");
+  const [editCategoryMode, setEditCategoryMode] = useState<"DEFAULT" | "CUSTOM">("DEFAULT");
+  const [editCustomCategories, setEditCustomCategories] = useState<string[]>(
+    event.categories && event.categories.length > 0
+      ? event.categories
+      : [...DEFAULT_PROJECT_CATEGORIES]
+  );
+  const [editCategoryInput, setEditCategoryInput] = useState<string>("");
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -137,6 +149,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditCourseInstitution(event.institution || "");
     setEditCourseSession(event.session);
     setEditCourseInviteCode(event.inviteCode || "2026");
+    const currentCats =
+      event.categories && event.categories.length > 0
+        ? event.categories
+        : [...DEFAULT_PROJECT_CATEGORIES];
+    setEditCustomCategories(currentCats);
+    const isDefaultMatch =
+      currentCats.length === DEFAULT_PROJECT_CATEGORIES.length &&
+      currentCats.every((c, idx) => c === DEFAULT_PROJECT_CATEGORIES[idx]);
+    setEditCategoryMode(isDefaultMatch ? "DEFAULT" : "CUSTOM");
   }, [event, projects.length]);
 
   const showToast = (msg: string) => {
@@ -241,22 +262,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // [엑셀 내보내기 1] 최종 집계 순위 및 환산 점수 (10점 등수 환산 + 토큰 환산 포함)
+  // [엑셀 내보내기 1] 최종 집계 순위 및 환산 점수 (10점 등수 환산 + 토큰 환산 + 총인원/출품아이디/팀원아이디 포함)
   const handleExportExcel = () => {
-    const rankingData = leaderboardData.map((p, idx) => ({
-      순위: idx + 1,
-      과정명: event.name,
-      과정초대코드: event.inviteCode || "2026",
-      팀번호: p.teamNumber,
-      팀명: p.teamName,
-      프로젝트명: p.title,
-      누적투자액_CR: p.totalCredits,
-      [`등수환산점수_10점만점(${effectiveRankTeams}팀기준)`]: p.rankScore10,
-      [`토큰환산점수(${creditUnit}CR당_${scorePerUnit}점)`]: p.convertedPoints,
-      참여투자자수: p.investorCount,
-      포맷: p.landingFormat,
-      분야: p.category || "AI/SaaS",
-    }));
+    const rankingData = leaderboardData.map((p, idx) => {
+      const authorUser = users.find(
+        (u) =>
+          u.id === p.authorId ||
+          (Boolean(p.authorEmail) && u.email.toLowerCase() === p.authorEmail!.toLowerCase())
+      );
+      const authorLoginId = p.authorEmail || authorUser?.email || p.authorId || "-";
+      const authorName = p.authorName || authorUser?.name || "-";
+      const memberList =
+        p.teamMemberDetails && p.teamMemberDetails.length > 0
+          ? p.teamMemberDetails.map((m) => `${m.email || m.id}(${m.name})`)
+          : (p.teamMemberIds || []).map((idStr) => {
+              const mu = users.find(
+                (u) => u.id === idStr || u.email.toLowerCase() === String(idStr).toLowerCase()
+              );
+              return mu ? `${mu.email}(${mu.name})` : String(idStr);
+            });
+      const totalHeadcount = 1 + memberList.length;
+
+      return {
+        순위: idx + 1,
+        과정명: event.name,
+        과정초대코드: event.inviteCode || "2026",
+        팀번호: p.teamNumber,
+        팀명: p.teamName,
+        프로젝트명: p.title,
+        총인원수: `${totalHeadcount}명`,
+        출품한_아이디: authorLoginId,
+        출품자_이름: authorName,
+        팀원_아이디_목록: memberList.length > 0 ? memberList.join(", ") : "없음(1인 출품)",
+        누적투자액_CR: p.totalCredits,
+        [`등수환산점수_10점만점(${effectiveRankTeams}팀기준)`]: p.rankScore10,
+        [`토큰환산점수(${creditUnit}CR당_${scorePerUnit}점)`]: p.convertedPoints,
+        참여투자자수: p.investorCount,
+        포맷: p.landingFormat,
+        분야: p.category || "AI/SaaS",
+      };
+    });
 
     const wb = XLSX.utils.book_new();
     const wsRanking = XLSX.utils.json_to_sheet(rankingData);
@@ -421,6 +466,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       alert("과정명과 초대코드 번호를 입력해 주세요.");
       return;
     }
+    const finalNewCategories =
+      newCategoryMode === "DEFAULT"
+        ? [...DEFAULT_PROJECT_CATEGORIES]
+        : newCustomCategories.map((c) => c.trim()).filter(Boolean);
+
+    if (finalNewCategories.length === 0) {
+      alert("최소 1개 이상의 출품 분야(카테고리)를 설정해 주세요.");
+      return;
+    }
+
     const res = await createCourse({
       name: newCourseName.trim(),
       institution: newCourseInstitution.trim() || "창업교육센터",
@@ -438,10 +493,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       rankScoreTeamCount: 10,
       creditUnitForScore: 1000,
       scorePerCreditUnit: 10,
+      categories: finalNewCategories,
     });
     if (res.success) {
       setNewCourseName("");
       setNewCourseInviteCode("");
+      setNewCategoryMode("DEFAULT");
+      setNewCustomCategories([...DEFAULT_PROJECT_CATEGORIES]);
+      setNewCategoryInput("");
       showToast(`🎉 ${res.message}`);
     } else {
       alert(res.message);
@@ -455,14 +514,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       alert("과정명과 초대코드는 비워둘 수 없습니다.");
       return;
     }
+    const finalEditCategories =
+      editCategoryMode === "DEFAULT"
+        ? [...DEFAULT_PROJECT_CATEGORIES]
+        : editCustomCategories.map((c) => c.trim()).filter(Boolean);
+
+    if (finalEditCategories.length === 0) {
+      alert("최소 1개 이상의 출품 분야(카테고리)를 설정해 주세요.");
+      return;
+    }
+
     const res = await updateCourse({
       name: editCourseName.trim(),
       institution: editCourseInstitution.trim(),
       session: editCourseSession.trim(),
       inviteCode: editCourseInviteCode.trim(),
+      categories: finalEditCategories,
     });
     if (res.success) {
-      showToast("✅ 과정 이름 및 초대코드가 저장되었습니다.");
+      showToast("✅ 과정 이름, 초대코드 및 출품 분야가 저장되었습니다.");
     } else {
       alert(res.message);
     }
@@ -966,6 +1036,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <tr>
                       <th className="py-3 px-4 text-center">순위</th>
                       <th className="py-3 px-4">팀명 (출품작)</th>
+                      <th className="py-3 px-4">총 인원 / 출품·팀원 아이디</th>
                       <th className="py-3 px-4">분야 / 형식</th>
                       <th className="py-3 px-4 text-right">누적 모의투자액</th>
                       <th className="py-3 px-4 text-right">서포터</th>
@@ -1006,6 +1077,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         );
                       }
 
+                      // 출품한 아이디(대표) 및 팀원 아이디 목록 계산
+                      const authorUser = users.find(
+                        (u) =>
+                          u.id === team.authorId ||
+                          (Boolean(team.authorEmail) &&
+                            u.email.toLowerCase() === team.authorEmail!.toLowerCase())
+                      );
+                      const authorLoginId = team.authorEmail || authorUser?.email || team.authorId || "-";
+                      const authorNameStr = team.authorName || authorUser?.name || "";
+
+                      const memberIdItems: { loginId: string; name: string }[] =
+                        team.teamMemberDetails && team.teamMemberDetails.length > 0
+                          ? team.teamMemberDetails.map((m) => ({
+                              loginId: m.email || m.id,
+                              name: m.name || "",
+                            }))
+                          : (team.teamMemberIds || []).map((idStr) => {
+                              const matchedU = users.find(
+                                (u) =>
+                                  u.id === idStr ||
+                                  u.email.toLowerCase() === String(idStr).toLowerCase()
+                              );
+                              return {
+                                loginId: matchedU ? matchedU.email : String(idStr),
+                                name: matchedU ? matchedU.name : "",
+                              };
+                            });
+                      const totalMemberCount = 1 + memberIdItems.length;
+
                       return (
                         <tr key={team.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3 px-4 text-center">{rankBadge}</td>
@@ -1013,6 +1113,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="font-bold text-slate-900">{team.title}</div>
                             <div className="text-[11px] text-slate-500 font-medium">
                               Team {String(team.teamNumber).padStart(2, "0")} · {team.teamName}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-bold">
+                                  총 {totalMemberCount}명
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-mono font-bold">
+                                  출품ID: {authorLoginId}
+                                  {authorNameStr ? ` (${authorNameStr})` : ""}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-1">
+                                <span className="font-semibold text-indigo-700 text-[10px]">
+                                  팀원ID:
+                                </span>
+                                {memberIdItems.length > 0 ? (
+                                  memberIdItems.map((m, mi) => (
+                                    <span
+                                      key={mi}
+                                      className="px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-100 text-indigo-800 font-mono text-[10px] font-semibold"
+                                    >
+                                      {m.loginId}
+                                      {m.name ? `(${m.name})` : ""}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-slate-400">없음 (1인 출품)</span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="py-3 px-4">
@@ -1089,7 +1220,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     })}
                     {leaderboardData.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                        <td colSpan={9} className="py-8 text-center text-slate-400">
                           현재 과정에 출품된 프로젝트가 없습니다.
                         </td>
                       </tr>
@@ -1588,6 +1719,136 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
+                {/* 출품 분야(카테고리) 세팅: 기본세팅 vs 커스텀하기 */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="block text-xs font-extrabold text-slate-800">
+                      출품 분야(카테고리) 세팅
+                    </label>
+                    <div className="inline-flex rounded-lg bg-slate-200 p-0.5 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewCategoryMode("DEFAULT");
+                          setNewCustomCategories([...DEFAULT_PROJECT_CATEGORIES]);
+                        }}
+                        className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                          newCategoryMode === "DEFAULT"
+                            ? "bg-white text-blue-700 shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        기본세팅
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryMode("CUSTOM")}
+                        className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                          newCategoryMode === "CUSTOM"
+                            ? "bg-blue-600 text-white shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        커스텀하기
+                      </button>
+                    </div>
+                  </div>
+
+                  {newCategoryMode === "DEFAULT" ? (
+                    <div className="flex flex-wrap gap-1">
+                      {DEFAULT_PROJECT_CATEGORIES.map((cat) => (
+                        <span
+                          key={cat}
+                          className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold"
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={newCategoryInput}
+                          onChange={(e) => setNewCategoryInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newCategoryInput.trim()) {
+                              e.preventDefault();
+                              const val = newCategoryInput.trim();
+                              if (!newCustomCategories.includes(val)) {
+                                setNewCustomCategories((prev) => [...prev, val]);
+                              }
+                              setNewCategoryInput("");
+                            }
+                          }}
+                          placeholder="새 분야 입력 (예: 로컬크리에이터)"
+                          className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs text-slate-900"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = newCategoryInput.trim();
+                            if (!val) return;
+                            if (!newCustomCategories.includes(val)) {
+                              setNewCustomCategories((prev) => [...prev, val]);
+                            }
+                            setNewCategoryInput("");
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          + 추가
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>등록된 커스텀 분야 ({newCustomCategories.length}개)</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNewCustomCategories([])}
+                            className="text-rose-600 hover:underline font-semibold cursor-pointer"
+                          >
+                            전체 비우기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewCustomCategories([...DEFAULT_PROJECT_CATEGORIES])}
+                            className="text-blue-600 hover:underline font-semibold cursor-pointer"
+                          >
+                            기본값 불러오기
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {newCustomCategories.map((cat, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-bold"
+                          >
+                            <span>{cat}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewCustomCategories((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="text-blue-400 hover:text-rose-600 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        {newCustomCategories.length === 0 && (
+                          <span className="text-[11px] text-rose-500">
+                            위 입력창에서 출품 분야를 1개 이상 추가해 주세요.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
@@ -1599,9 +1860,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">현재 선택된 과정 명칭 및 초대코드 수정</h3>
+                <h3 className="font-bold text-slate-900 text-sm">현재 선택된 과정 명칭·초대코드·분야 수정</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  여기서 수정한 <strong>과정명</strong>이 인터넷 브라우저 상단 탭 제목과 홈페이지 배너 제목으로 즉시 반영됩니다.
+                  여기서 수정한 <strong>과정명</strong>과 <strong>출품 분야</strong>가 출품 등록창 및 메인 검색 필터에 즉시 반영됩니다.
                 </p>
               </div>
               <form onSubmit={handleUpdateCurrentCourse} className="space-y-3">
@@ -1643,11 +1904,142 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="w-full px-3 py-2 rounded-xl border-2 border-amber-300 bg-amber-50/40 font-mono font-extrabold text-xs text-amber-900"
                   />
                 </div>
+
+                {/* 현재 과정 출품 분야(카테고리) 세팅 수정: 기본세팅 vs 커스텀하기 */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="block text-xs font-extrabold text-slate-800">
+                      현재 과정 출품 분야 세팅
+                    </label>
+                    <div className="inline-flex rounded-lg bg-slate-200 p-0.5 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditCategoryMode("DEFAULT");
+                          setEditCustomCategories([...DEFAULT_PROJECT_CATEGORIES]);
+                        }}
+                        className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                          editCategoryMode === "DEFAULT"
+                            ? "bg-white text-slate-900 shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        기본세팅
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditCategoryMode("CUSTOM")}
+                        className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                          editCategoryMode === "CUSTOM"
+                            ? "bg-slate-900 text-white shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        커스텀하기
+                      </button>
+                    </div>
+                  </div>
+
+                  {editCategoryMode === "DEFAULT" ? (
+                    <div className="flex flex-wrap gap-1">
+                      {DEFAULT_PROJECT_CATEGORIES.map((cat) => (
+                        <span
+                          key={cat}
+                          className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold"
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={editCategoryInput}
+                          onChange={(e) => setEditCategoryInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && editCategoryInput.trim()) {
+                              e.preventDefault();
+                              const val = editCategoryInput.trim();
+                              if (!editCustomCategories.includes(val)) {
+                                setEditCustomCategories((prev) => [...prev, val]);
+                              }
+                              setEditCategoryInput("");
+                            }
+                          }}
+                          placeholder="새 분야 입력 후 [+ 추가]"
+                          className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs text-slate-900"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = editCategoryInput.trim();
+                            if (!val) return;
+                            if (!editCustomCategories.includes(val)) {
+                              setEditCustomCategories((prev) => [...prev, val]);
+                            }
+                            setEditCategoryInput("");
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shrink-0 cursor-pointer"
+                        >
+                          + 추가
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>등록된 커스텀 분야 ({editCustomCategories.length}개)</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditCustomCategories([])}
+                            className="text-rose-600 hover:underline font-semibold cursor-pointer"
+                          >
+                            전체 비우기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditCustomCategories([...DEFAULT_PROJECT_CATEGORIES])}
+                            className="text-blue-600 hover:underline font-semibold cursor-pointer"
+                          >
+                            기본값 불러오기
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {editCustomCategories.map((cat, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-200/80 border border-slate-300 text-slate-900 text-[11px] font-bold"
+                          >
+                            <span>{cat}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditCustomCategories((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              className="text-slate-500 hover:text-rose-600 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        {editCustomCategories.length === 0 && (
+                          <span className="text-[11px] text-rose-500">
+                            위 입력창에서 출품 분야를 1개 이상 추가해 주세요.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer"
                 >
-                  현재 과정 정보 저장
+                  현재 과정 정보 및 분야 저장
                 </button>
               </form>
             </div>
@@ -1793,6 +2185,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         >
                           랭킹 {ev.isRankingPublic ? "공개" : "비공개"}
                         </span>
+                      </div>
+
+                      {/* 과정별 설정된 출품 분야 표시 */}
+                      <div className="pt-1 flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] font-bold text-slate-400 mr-0.5">출품 분야:</span>
+                        {(ev.categories && ev.categories.length > 0
+                          ? ev.categories
+                          : [...DEFAULT_PROJECT_CATEGORIES]
+                        ).map((cat, ci) => (
+                          <span
+                            key={ci}
+                            className="px-1.5 py-0.2 rounded bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-medium"
+                          >
+                            {cat}
+                          </span>
+                        ))}
                       </div>
                     </div>
 

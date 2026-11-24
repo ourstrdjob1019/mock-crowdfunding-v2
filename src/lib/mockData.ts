@@ -1,4 +1,4 @@
-import { Event, Project, User, Investment, RosterItem } from "@/types";
+import { Event, Project, User, Investment, RosterItem, DEFAULT_PROJECT_CATEGORIES } from "@/types";
 
 export const INITIAL_EVENT: Event = {
   id: "evt-2026-v2-01",
@@ -18,6 +18,7 @@ export const INITIAL_EVENT: Event = {
   rankScoreTeamCount: 10,
   creditUnitForScore: 1000,
   scorePerCreditUnit: 10,
+  categories: [...DEFAULT_PROJECT_CATEGORIES],
 };
 
 export const INITIAL_ROSTER: RosterItem[] = [

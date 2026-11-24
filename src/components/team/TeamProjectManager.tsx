@@ -16,21 +16,18 @@ export const TeamProjectManager: React.FC<TeamProjectManagerProps> = ({
   openCreateProject,
   onEditProject,
 }) => {
-  const { currentUser, projects, event, canStudentEditProject } = useApp();
+  const { currentUser, event, canStudentEditProject, findUserSubmittedOrMemberProject } = useApp();
 
   if (!currentUser) return null;
 
-  // 내 팀 프로젝트 찾기 (isUserProject이거나 currentUser.teamId 일치 또는 팀명 일치 또는 authorId 일치)
-  const myProj = projects.find(
-    (p) =>
-      p.isUserProject ||
-      (currentUser.teamId && currentUser.teamId === p.teamId) ||
-      (currentUser.teamName && p.teamName && currentUser.teamName.trim() === p.teamName.trim()) ||
-      p.authorId === currentUser.id
-  );
+  // 본인이 직접 출품한 프로젝트("AUTHOR") 또는 팀원으로 체크된 프로젝트("MEMBER") 조회
+  const myStatus = findUserSubmittedOrMemberProject(currentUser);
+  const myProj = myStatus?.project;
+  const myRoleInProject = myStatus?.role; // "AUTHOR" | "MEMBER" | undefined
 
-  const canCreate = currentUser.role === "ADMIN" || Boolean(event.isRegistrationOpen);
-  const canEdit = currentUser.role === "ADMIN" || canStudentEditProject;
+  const canCreate = currentUser.role === "ADMIN" || (Boolean(event.isRegistrationOpen) && !myStatus);
+  const canEdit =
+    currentUser.role === "ADMIN" || (myRoleInProject === "AUTHOR" && canStudentEditProject);
 
   if (!myProj) {
     return (
@@ -68,11 +65,32 @@ export const TeamProjectManager: React.FC<TeamProjectManagerProps> = ({
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200">
             <Award className="w-3.5 h-3.5" />
-            내 팀 출품 프로젝트 대시보드
+            {myRoleInProject === "MEMBER"
+              ? "소속 팀원으로 등록된 프로젝트 (별도 출품 불가 · 출품 한도 0개)"
+              : "내가 출품 등록한 프로젝트 (1아이디 1출품 완료)"}
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-1">
             [Team {String(myProj.teamNumber).padStart(2, "0")}] {myProj.teamName} - {myProj.title}
           </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            총 인원{" "}
+            <strong className="text-slate-800">
+              {1 + (myProj.teamMemberDetails?.length || myProj.teamMemberIds?.length || 0)}명
+            </strong>{" "}
+            · 출품 아이디:{" "}
+            <code className="font-mono font-bold text-blue-700">
+              {myProj.authorEmail || myProj.authorId || "-"}
+            </code>
+            {myProj.teamMemberDetails && myProj.teamMemberDetails.length > 0 && (
+              <>
+                {" "}
+                · 팀원 아이디:{" "}
+                <code className="font-mono font-bold text-indigo-700">
+                  {myProj.teamMemberDetails.map((m) => m.email || m.id).join(", ")}
+                </code>
+              </>
+            )}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start">
@@ -88,7 +106,13 @@ export const TeamProjectManager: React.FC<TeamProjectManagerProps> = ({
           ) : (
             <span className="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 font-semibold text-xs flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-slate-400" />
-              <span>{event.isFundingOpen ? "펀딩 진행 중 (수정 잠금)" : "출품 마감 (수정 잠금)"}</span>
+              <span>
+                {myRoleInProject === "MEMBER"
+                  ? "팀원 계정 (출품/수정 불가)"
+                  : event.isFundingOpen
+                  ? "펀딩 진행 중 (수정 잠금)"
+                  : "출품 마감 (수정 잠금)"}
+              </span>
             </span>
           )}
 

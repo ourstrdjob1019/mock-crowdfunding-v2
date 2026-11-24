@@ -1,3 +1,12 @@
+export const DEFAULT_PROJECT_CATEGORIES = [
+  "AI/SaaS",
+  "Bio/Health",
+  "FinTech",
+  "GreenTech",
+  "Robotics",
+  "EdTech",
+] as const;
+
 export type EventStage = "PREPARING" | "REGISTRATION" | "FUNDING_OPEN" | "FUNDING_CLOSED" | "RANKING_PUBLISHED";
 
 export interface Event {
@@ -18,6 +27,7 @@ export interface Event {
   rankScoreTeamCount?: number; // 10점 만점 등수 환산 기준 팀 수 (예: 5, 10, 20)
   creditUnitForScore?: number; // 환산 기준 크레딧 (예: 1000 CR)
   scorePerCreditUnit?: number; // 환산 점수 (예: 10 점)
+  categories?: string[]; // 과정별 출품 분야 목록 (기본 6종 또는 관리자 커스텀 설정)
 }
 
 export interface Team {
@@ -57,7 +67,7 @@ export interface User {
 
 export type LandingFormat = "IMAGE" | "PDF" | "HTML" | "WEB" | "VIDEO";
 export type MediaType = "IMAGE" | "PDF" | "HTML" | "VIDEO";
-export type ProjectCategory = "AI/SaaS" | "Bio/Health" | "FinTech" | "GreenTech" | "Robotics" | "EdTech";
+export type ProjectCategory = string;
 
 export interface ProjectMediaItem {
   id: string;

@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
-import { User, Project, Investment, Event, EventStage } from "@/types";
+import { User, Project, Investment, Event, EventStage, DEFAULT_PROJECT_CATEGORIES } from "@/types";
 const EXT_TAG_REGEX = /<!--PROJECT_EXT_DATA:([\s\S]*?)-->/;
 const EXT_TAG_PREFIX = "\n\n<!--PROJECT_EXT_DATA:";
 const EXT_TAG_SUFFIX = "-->";
@@ -224,6 +224,10 @@ export function mapDbEventToModel(row: any): Event {
     rankScoreTeamCount: Number(meta.rankScoreTeamCount) || 10,
     creditUnitForScore: Number(meta.creditUnitForScore) || 1000,
     scorePerCreditUnit: Number(meta.scorePerCreditUnit) || 10,
+    categories:
+      Array.isArray(meta.categories) && meta.categories.length > 0
+        ? meta.categories.map((c: any) => String(c).trim()).filter(Boolean)
+        : [...DEFAULT_PROJECT_CATEGORIES],
   };
 }
 
@@ -240,6 +244,10 @@ export function mapModelEventToDb(event: Event): Record<string, any> {
     rankScoreTeamCount: Number(event.rankScoreTeamCount) || 10,
     creditUnitForScore: Number(event.creditUnitForScore) || 1000,
     scorePerCreditUnit: Number(event.scorePerCreditUnit) || 10,
+    categories:
+      Array.isArray(event.categories) && event.categories.length > 0
+        ? event.categories.map((c) => String(c).trim()).filter(Boolean)
+        : [...DEFAULT_PROJECT_CATEGORIES],
   };
 
   // 토글 스위치 상태에 맞춰 currentStage도 호환 유지

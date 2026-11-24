@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Project, LandingFormat, ProjectCategory, MediaType, ProjectMediaItem, TeamMemberDetail } from "@/types";
+import { Project, LandingFormat, ProjectCategory, MediaType, ProjectMediaItem, TeamMemberDetail, DEFAULT_PROJECT_CATEGORIES } from "@/types";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/Button";
 import { supabase, uploadThumbnail, uploadLandingFile } from "@/lib/supabase";
@@ -38,9 +38,22 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   onClose,
   editProject,
 }) => {
-  const { currentUser, users, roster, event, createProject, updateProject, deleteProject } = useApp();
+  const {
+    currentUser,
+    users,
+    roster,
+    event,
+    createProject,
+    updateProject,
+    deleteProject,
+    findUserSubmittedOrMemberProject,
+  } = useApp();
 
   const isEditing = Boolean(editProject);
+  const courseCategories =
+    event.categories && event.categories.length > 0
+      ? event.categories
+      : [...DEFAULT_PROJECT_CATEGORIES];
 
   const [title, setTitle] = useState("");
   const [teamName, setTeamName] = useState("");
@@ -130,7 +143,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       setTeamName(editProject.teamName);
       setSummary(editProject.summary);
       setDescription(editProject.description);
-      setCategory(editProject.category || "AI/SaaS");
+      setCategory(editProject.category || courseCategories[0] || "AI/SaaS");
       setTargetCredits(editProject.targetCredits || 20000);
       setHighlight1(editProject.pitchHighlights?.[0] || "");
       setHighlight2(editProject.pitchHighlights?.[1] || "");
@@ -263,7 +276,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       setTeamName(currentUser?.teamName || `${currentUser?.name || "학생"} 팀`);
       setSummary("");
       setDescription("");
-      setCategory("AI/SaaS");
+      setCategory(courseCategories[0] || "AI/SaaS");
       setTargetCredits(20000);
       setHighlight1("");
       setHighlight2("");
@@ -424,19 +437,38 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       notFound.push(inputVal);
     }
 
-    // 중복 제거
-    const uniqueMatched = matched.filter((v, idx, arr) => 
-      arr.findIndex(item => item.email.toLowerCase() === v.email.toLowerCase()) === idx
+    // 중복 제거 및 타 팀 출품자/팀원 여부 검증
+    const uniqueMatched = matched.filter(
+      (v, idx, arr) => arr.findIndex((item) => item.email.toLowerCase() === v.email.toLowerCase()) === idx
     );
 
-    setResolvedMembers(uniqueMatched);
+    const validMembers: TeamMemberDetail[] = [];
+    const conflictedMembers: string[] = [];
+
+    for (const mem of uniqueMatched) {
+      const conflict = findUserSubmittedOrMemberProject(mem, editProject?.id);
+      if (conflict) {
+        conflictedMembers.push(
+          `${mem.name}(${mem.email} · 이미 [${conflict.project.title}]의 ${
+            conflict.role === "AUTHOR" ? "출품 대표자" : "팀원"
+          })`
+        );
+      } else {
+        validMembers.push(mem);
+      }
+    }
+
+    setResolvedMembers(validMembers);
 
     let msg = "";
-    if (uniqueMatched.length > 0) {
-      msg += `✅ ${uniqueMatched.length}명의 팀원이 정상 확인되어 등록되었습니다. `;
+    if (validMembers.length > 0) {
+      msg += `✅ ${validMembers.length}명의 팀원이 정상 확인되어 등록되었습니다. `;
     }
     if (selfDetected) {
       msg += `ℹ️ 대표자 본인은 이미 기본 등록되어 있어 팀원 목록에서 자동 제외되었습니다. `;
+    }
+    if (conflictedMembers.length > 0) {
+      msg += `⛔ 타 프로젝트 중복 제외: [${conflictedMembers.join(", ")}]. `;
     }
     if (notFound.length > 0) {
       msg += `⚠️ 미가입 아이디/이메일: [${notFound.join(", ")}]. 먼저 회원가입 후 등록해 주세요.`;
@@ -521,16 +553,30 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     return allCandidates.slice(0, 5); // 상위 5명
   };
 
-  // 자동완성 드롭다운에서 학생을 클릭했을 때 즉시 팀원으로 반영
-  const handleSelectSuggestedMember = (index: number, candidate: { id: string; name: string; email: string; department: string; studentNumber: string }) => {
-    setMemberInputs(prev => {
+  // 자동완성 드롭다운에서 학생을 클릭했을 때 즉시 팀원으로 반영 (타 프로젝트 출품자/팀원 중복 검증 포함)
+  const handleSelectSuggestedMember = (
+    index: number,
+    candidate: { id: string; name: string; email: string; department: string; studentNumber: string }
+  ) => {
+    const conflict = findUserSubmittedOrMemberProject(candidate, editProject?.id);
+    if (conflict) {
+      setMemberLookupMessage(
+        `⛔ ${candidate.name} (${candidate.email}) 학생은 이미 [${conflict.project.teamName} - ${conflict.project.title}] 프로젝트의 ${
+          conflict.role === "AUTHOR" ? "출품 대표자" : "팀원"
+        }로 등록되어 있어 팀원으로 추가할 수 없습니다.`
+      );
+      setActiveSearchIdx(null);
+      return;
+    }
+
+    setMemberInputs((prev) => {
       const next = [...prev];
       next[index] = candidate.email;
       return next;
     });
 
-    setResolvedMembers(prev => {
-      const exists = prev.some(m => m.email.toLowerCase() === candidate.email.toLowerCase());
+    setResolvedMembers((prev) => {
+      const exists = prev.some((m) => m.email.toLowerCase() === candidate.email.toLowerCase());
       if (exists) return prev;
       return [
         ...prev,
@@ -540,11 +586,13 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
           name: candidate.name,
           department: candidate.department,
           studentNumber: candidate.studentNumber,
-        }
+        },
       ];
     });
 
-    setMemberLookupMessage(`✅ ${candidate.name} (${candidate.department} · ${candidate.studentNumber}) 학생이 팀원으로 추가되었습니다.`);
+    setMemberLookupMessage(
+      `✅ ${candidate.name} (${candidate.email} · ${candidate.department}) 학생이 팀원으로 추가되었습니다.`
+    );
     setActiveSearchIdx(null);
   };
 
@@ -1246,12 +1294,11 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 onChange={(e) => setCategory(e.target.value as ProjectCategory)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all outline-none bg-white"
               >
-                <option value="AI/SaaS">AI / SaaS</option>
-                <option value="Bio/Health">Bio / Healthcare</option>
-                <option value="FinTech">FinTech / 금융</option>
-                <option value="GreenTech">GreenTech / 환경</option>
-                <option value="Robotics">Robotics / 하드웨어</option>
-                <option value="EdTech">EdTech / 교육</option>
+                {Array.from(new Set([...courseCategories, ...(category ? [category] : [])])).map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
               </select>
             </div>
 

@@ -783,35 +783,74 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
               )}
             </div>
 
-            {/* Team Members & Details */}
-            {((project.teamMemberDetails && project.teamMemberDetails.length > 0) || (project.teamMembers && project.teamMembers.length > 0)) && (
-              <div className="space-y-2 pt-3 border-t border-slate-200">
-                <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-indigo-600" />
-                  소속 팀원 정보 (Team Members)
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {project.teamMemberDetails && project.teamMemberDetails.length > 0 ? (
-                    project.teamMemberDetails.map((mem, mi) => (
-                      <div key={mi} className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-950 flex items-center gap-1.5">
-                        <span className="font-bold text-indigo-900">{mem.name}</span>
-                        {mem.department && <span className="text-indigo-400">|</span>}
-                        {mem.department && <span className="text-indigo-700 text-[11px]">{mem.department}</span>}
-                        {mem.studentNumber && <span className="text-indigo-500 font-mono text-[10px]">({mem.studentNumber})</span>}
+            {/* Team Members & Author ID Summary (총 인원, 출품한 아이디, 팀원 아이디 표시) */}
+            {(() => {
+              const memberDetailsList =
+                project.teamMemberDetails && project.teamMemberDetails.length > 0
+                  ? project.teamMemberDetails
+                  : (project.teamMemberIds || []).map((idStr) => ({
+                      id: idStr,
+                      email: idStr,
+                      name: "팀원",
+                      department: "",
+                      studentNumber: "",
+                    }));
+              const totalHeadcount = 1 + memberDetailsList.length;
+              const authorIdDisplay = project.authorEmail || project.authorId || "-";
+
+              return (
+                <div className="space-y-2.5 pt-3 border-t border-slate-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                      소속 인원 및 출품·팀원 아이디 정보
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] font-extrabold">
+                      총 인원 {totalHeadcount}명 (출품 대표 1명 + 팀원 {memberDetailsList.length}명)
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {/* 1. 출품한 대표 아이디 */}
+                    <div className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-950 flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.2 rounded bg-blue-600 text-white text-[10px] font-bold">
+                        출품 아이디
+                      </span>
+                      <span className="font-mono font-extrabold text-blue-800">{authorIdDisplay}</span>
+                      {project.authorName && (
+                        <span className="text-blue-600 text-[11px]">({project.authorName})</span>
+                      )}
+                    </div>
+
+                    {/* 2. 팀원 아이디 목록 */}
+                    {memberDetailsList.length > 0 ? (
+                      memberDetailsList.map((mem, mi) => (
+                        <div
+                          key={mi}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-950 flex items-center gap-1.5"
+                        >
+                          <span className="px-1.5 py-0.2 rounded bg-indigo-600 text-white text-[10px] font-bold">
+                            팀원 아이디
+                          </span>
+                          <span className="font-mono font-extrabold text-indigo-800">
+                            {mem.email || mem.id}
+                          </span>
+                          <span className="text-indigo-700 text-[11px]">
+                            ({mem.name}
+                            {mem.department ? ` · ${mem.department}` : ""}
+                            {mem.studentNumber && mem.studentNumber !== "-" ? ` · ${mem.studentNumber}` : ""})
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-3 py-1.5 rounded-xl bg-slate-100 text-xs text-slate-500 flex items-center">
+                        추가 등록된 팀원 아이디 없음 (1인 출품)
                       </div>
-                    ))
-                  ) : (
-                    project.teamMembers?.map((mem, mi) => (
-                      <div key={mi} className="px-3 py-1.5 rounded-xl bg-slate-100 text-xs text-slate-800 flex items-center gap-1.5">
-                        <span className="font-bold text-slate-900">{mem.name}</span>
-                        <span className="text-slate-400">|</span>
-                        <span className="text-slate-500 text-[11px]">{mem.role}</span>
-                      </div>
-                    ))
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
             {/* Cheering Comments & Discussion */}
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold text-slate-900 flex items-center justify-between">

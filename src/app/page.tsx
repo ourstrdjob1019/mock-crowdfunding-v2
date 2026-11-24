@@ -11,7 +11,7 @@ import { RankingBoard } from "@/components/ranking/RankingBoard";
 import { MyInvestmentsView } from "@/components/investments/MyInvestmentsView";
 import { TeamProjectManager } from "@/components/team/TeamProjectManager";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
-import { Project } from "@/types";
+import { Project, DEFAULT_PROJECT_CATEGORIES } from "@/types";
 import { 
   Search, 
   Sparkles, 
@@ -31,7 +31,16 @@ import {
 } from "lucide-react";
 
 function MainDashboard() {
-  const { event, events, selectCourse, canStudentEditProject, projects, currentUser, logout } = useApp();
+  const {
+    event,
+    events,
+    selectCourse,
+    canStudentEditProject,
+    projects,
+    currentUser,
+    logout,
+    findUserSubmittedOrMemberProject,
+  } = useApp();
   const [currentTab, setCurrentTab] = useState<"gallery" | "my-investments" | "team-project" | "admin">("gallery");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -51,6 +60,45 @@ function MainDashboard() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3200);
+  };
+
+  // 현재 과정에 세팅된 분야(기본세팅 또는 커스텀 분야) + 이미 출품된 작품들의 분야를 합쳐 검색 필터 구성
+  const availableCategories = useMemo(() => {
+    const configured =
+      event.categories && event.categories.length > 0
+        ? event.categories
+        : [...DEFAULT_PROJECT_CATEGORIES];
+    const extraFromProjects = projects
+      .map((p) => p.category)
+      .filter((c): c is string => Boolean(c) && !configured.includes(c!));
+    return ["ALL", ...configured, ...Array.from(new Set(extraFromProjects))];
+  }, [event.categories, projects]);
+
+  // 새 프로젝트 출품 등록 모달 열기 (1아이디 1출품 및 팀원 0출품 사전 검증)
+  const handleTryOpenCreateProject = () => {
+    if (currentUser?.role !== "ADMIN") {
+      const myStatus = findUserSubmittedOrMemberProject(currentUser);
+      if (myStatus?.role === "AUTHOR") {
+        showToast(
+          `🔒 이미 출품 등록하신 프로젝트([${myStatus.project.title}])가 있습니다. 아이디 1개당 1개만 출품할 수 있습니다.`
+        );
+        setCurrentTab("team-project");
+        return;
+      }
+      if (myStatus?.role === "MEMBER") {
+        showToast(
+          `🔒 [${myStatus.project.teamName} - ${myStatus.project.title}]의 팀원으로 체크된 아이디는 출품 등록을 할 수 없습니다.`
+        );
+        setCurrentTab("team-project");
+        return;
+      }
+      if (!canStudentEditProject && !event.isRegistrationOpen) {
+        showToast("🔒 현재 출품 등록 기간이 아닙니다.");
+        return;
+      }
+    }
+    setEditingProject(null);
+    setIsCreateModalOpen(true);
   };
 
   // Filtered & Sorted Projects
@@ -205,10 +253,7 @@ function MainDashboard() {
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           openProjectorRanking={() => setIsProjectorRankingOpen(true)}
-          openCreateProject={() => {
-            setEditingProject(null);
-            setIsCreateModalOpen(true);
-          }}
+          openCreateProject={handleTryOpenCreateProject}
           isOpenMobile={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
@@ -317,9 +362,9 @@ function MainDashboard() {
 
                   {/* Filter tags (Category & Format) - Horizontal Scroll on Mobile */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-                    {/* Category Pills (Touch friendly horizontal scroll) */}
+                    {/* Category Pills (과정별 기본세팅 또는 커스텀 세팅 분야 동적 연동) */}
                     <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 sm:mx-0 sm:px-0">
-                      {["ALL", "AI/SaaS", "Bio/Health", "FinTech", "GreenTech", "Robotics", "EdTech"].map((cat) => (
+                      {availableCategories.map((cat) => (
                         <button
                           key={cat}
                           type="button"
@@ -388,10 +433,7 @@ function MainDashboard() {
                     {!searchQuery && (currentUser?.role === "ADMIN" || canStudentEditProject) && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditingProject(null);
-                          setIsCreateModalOpen(true);
-                        }}
+                        onClick={handleTryOpenCreateProject}
                         className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700 transition inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                       >
                         <Plus className="w-4 h-4" /> 프로젝트 출품 등록하기
@@ -415,10 +457,7 @@ function MainDashboard() {
             {currentTab === "team-project" && (
               <TeamProjectManager
                 onSelectProject={(p) => setSelectedProject(p)}
-                openCreateProject={() => {
-                  setEditingProject(null);
-                  setIsCreateModalOpen(true);
-                }}
+                openCreateProject={handleTryOpenCreateProject}
                 onEditProject={(p) => {
                   setEditingProject(p);
                   setIsCreateModalOpen(true);
@@ -470,18 +509,7 @@ function MainDashboard() {
         {/* Quick Center Floating Action Button for Project Submission */}
         <button
           type="button"
-          onClick={() => {
-            if (currentUser?.role !== "ADMIN" && !canStudentEditProject) {
-              showToast(
-                event.isFundingOpen
-                  ? "🔒 펀딩 진행 중에는 작품을 등록하거나 수정할 수 없습니다."
-                  : "🔒 현재 출품 등록 기간이 아닙니다."
-              );
-              return;
-            }
-            setEditingProject(null);
-            setIsCreateModalOpen(true);
-          }}
+          onClick={handleTryOpenCreateProject}
           className="flex flex-col items-center justify-center -mt-5"
         >
           <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 active:scale-95 transition cursor-pointer">

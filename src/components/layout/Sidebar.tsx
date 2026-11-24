@@ -34,20 +34,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const {
     event,
     currentUser,
-    users,
-    setCurrentUser,
     logout,
     remainingCredits,
     usedCredits,
     projects,
     getUserTotalInvestments,
     resetCreditsToDefault,
+    findUserSubmittedOrMemberProject,
   } = useApp();
 
   if (!currentUser) return null;
 
   const creditUsagePercent = Math.min(100, Math.round((usedCredits / event.baseCredit) * 100));
   const myInvestments = getUserTotalInvestments();
+  const myProjectStatus = findUserSubmittedOrMemberProject(currentUser);
 
   const handleTabClick = (tab: "gallery" | "my-investments" | "team-project" | "admin") => {
     setCurrentTab(tab);
@@ -228,9 +228,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </nav>
 
-        {/* 4. CTA Button: Glowing primary blue "+ 새 프로젝트 출품 등록" */}
-        {openCreateProject && (
-          currentUser.role === "ADMIN" || event.isRegistrationOpen ? (
+        {/* 4. CTA Button: 아이디 1개당 1출품 & 팀원으로 체크된 아이디는 출품 0개 제한 */}
+        {openCreateProject &&
+          (currentUser.role !== "ADMIN" && myProjectStatus ? (
+            <button
+              type="button"
+              onClick={() => handleTabClick("team-project")}
+              className="w-full py-2.5 px-3.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-bold text-xs text-center transition cursor-pointer space-y-0.5"
+            >
+              <div>
+                {myProjectStatus.role === "AUTHOR"
+                  ? "✓ 출품 완료 (1계정 1출품 제한)"
+                  : "🔒 팀원 소속 계정 (출품 불가)"}
+              </div>
+              <div className="text-[10px] font-normal text-amber-700 truncate">
+                [{myProjectStatus.project.teamName}] 내 팀 프로젝트 보기 →
+              </div>
+            </button>
+          ) : currentUser.role === "ADMIN" || event.isRegistrationOpen ? (
             <button
               type="button"
               onClick={() => {
@@ -246,8 +261,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="w-full py-2.5 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 font-semibold text-xs text-center">
               🔒 출품 등록이 마감되었습니다
             </div>
-          )
-        )}
+          ))}
       </div>
 
       {/* 5. Bottom User Profile */}

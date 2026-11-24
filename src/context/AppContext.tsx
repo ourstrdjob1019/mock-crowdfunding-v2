@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
-import { Event, Project, User, Investment, EventStage, RosterItem, UserRole, Comment } from "@/types";
+import { Event, Project, User, Investment, EventStage, RosterItem, UserRole, Comment, DEFAULT_PROJECT_CATEGORIES } from "@/types";
 import { INITIAL_EVENT, INITIAL_ROSTER, INITIAL_USERS } from "@/lib/mockData";
 import {
   fetchAllFromSupabase,
@@ -50,6 +50,10 @@ interface AppContextType {
     value?: boolean
   ) => Promise<void>;
   findCourseByInviteCode: (code: string) => Event | undefined;
+  findUserSubmittedOrMemberProject: (
+    userObj: { id?: string; email?: string; studentNumber?: string } | null | undefined,
+    excludeProjectId?: string
+  ) => { project: Project; role: "AUTHOR" | "MEMBER" } | null;
   canStudentEditProject: boolean;
   currentUser: User | null;
   isLoggedIn: boolean;
@@ -355,6 +359,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       rankScoreTeamCount: courseData.rankScoreTeamCount || 10,
       creditUnitForScore: courseData.creditUnitForScore || 1000,
       scorePerCreditUnit: courseData.scorePerCreditUnit || 10,
+      categories:
+        courseData.categories && courseData.categories.length > 0
+          ? courseData.categories
+          : [...DEFAULT_PROJECT_CATEGORIES],
     };
 
     const res = await dbUpdateEvent(newCourse);
@@ -863,7 +871,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 1. 새 프로젝트 등록 (출품 등록 토글 스위치 검증 + 중복 클릭 원천 잠금)
+  // 특정 아이디가 현재 과정에서 이미 출품한 대표자인지("AUTHOR") 또는 다른 출품작의 팀원("MEMBER")인지 확인
+  const findUserSubmittedOrMemberProject = (
+    userObj: { id?: string; email?: string; studentNumber?: string } | null | undefined,
+    excludeProjectId?: string
+  ): { project: Project; role: "AUTHOR" | "MEMBER" } | null => {
+    if (!userObj) return null;
+    const uid = (userObj.id || "").trim();
+    const uemail = (userObj.email || "").trim().toLowerCase();
+    const usnum = (userObj.studentNumber || "").trim();
+
+    const targetList = excludeProjectId
+      ? projects.filter((p) => p.id !== excludeProjectId)
+      : projects;
+
+    // 1. 출품 대표자(AUTHOR) 여부 확인
+    const authored = targetList.find(
+      (p) =>
+        (Boolean(uid) && p.authorId === uid) ||
+        (Boolean(uemail) && Boolean(p.authorEmail) && p.authorEmail!.toLowerCase() === uemail)
+    );
+    if (authored) {
+      return { project: authored, role: "AUTHOR" };
+    }
+
+    // 2. 팀원(MEMBER)으로 체크되어 있는지 확인
+    const memberOf = targetList.find((p) => {
+      const inIds =
+        Array.isArray(p.teamMemberIds) &&
+        p.teamMemberIds.some((rawId) => {
+          const clean = String(rawId || "").trim();
+          if (!clean) return false;
+          if (uid && clean === uid) return true;
+          if (uemail && clean.toLowerCase() === uemail) return true;
+          if (usnum && usnum !== "-" && clean === usnum) return true;
+          return false;
+        });
+      if (inIds) return true;
+
+      const inDetails =
+        Array.isArray(p.teamMemberDetails) &&
+        p.teamMemberDetails.some((m) => {
+          if (uid && m.id === uid) return true;
+          if (uemail && m.email && m.email.toLowerCase() === uemail) return true;
+          if (usnum && usnum !== "-" && m.studentNumber === usnum) return true;
+          return false;
+        });
+      return inDetails;
+    });
+
+    if (memberOf) {
+      return { project: memberOf, role: "MEMBER" };
+    }
+
+    return null;
+  };
+
+  // 1. 새 프로젝트 등록 (출품 등록 토글 스위치 검증 + 1아이디 1출품 제한 + 팀원 출품 0개 제한 + 중복 클릭 원천 잠금)
   const createProject = async (
     data: Omit<Project, "id" | "totalCredits" | "investorCount" | "lastModifierName" | "lastModifiedAt" | "isHidden">
   ): Promise<{ success: boolean; project?: Project; message: string }> => {
@@ -877,6 +941,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         success: false,
         message: "현재 출품 등록이 마감(비활성화)된 상태입니다. 관리자에게 문의해 주세요.",
       };
+    }
+
+    // [규칙 1 & 2] 일반 참가자/학생은 아이디 1개당 출품 1개만 가능하며, 팀원으로 체크된 아이디는 출품 불가(0개)
+    if (!isAdmin) {
+      const myStatus = findUserSubmittedOrMemberProject(currentUser);
+      if (myStatus?.role === "AUTHOR") {
+        return {
+          success: false,
+          message: `이미 출품 등록하신 프로젝트([${myStatus.project.title}])가 있습니다. 아이디 1개당 1개의 프로젝트만 출품 등록할 수 있습니다. (수정은 [내 팀 프로젝트] 메뉴를 이용해 주세요)`,
+        };
+      }
+      if (myStatus?.role === "MEMBER") {
+        return {
+          success: false,
+          message: `현재 [${myStatus.project.teamName} - ${myStatus.project.title}] 프로젝트의 팀원으로 등록된 아이디이므로 출품 등록을 할 수 없습니다. (팀원으로 체크된 아이디는 출품 가능 0개)`,
+        };
+      }
+    }
+
+    // 팀원으로 추가한 아이디가 이미 다른 프로젝트의 대표자이거나 팀원인지 검증
+    if (data.teamMemberDetails && data.teamMemberDetails.length > 0) {
+      for (const mem of data.teamMemberDetails) {
+        const conflict = findUserSubmittedOrMemberProject(mem);
+        if (conflict) {
+          return {
+            success: false,
+            message: `팀원으로 선택한 [${mem.name} (${mem.email})] 아이디는 이미 [${conflict.project.teamName} - ${conflict.project.title}] 프로젝트의 ${
+              conflict.role === "AUTHOR" ? "출품 대표자" : "팀원"
+            }로 등록되어 있어 팀원으로 중복 지정할 수 없습니다.`,
+          };
+        }
+      }
     }
 
     return runWithMutationLock(
@@ -957,10 +1053,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const isAuthor =
       targetProject.authorId === currentUser.id ||
-      Boolean(currentUser.teamId && currentUser.teamId === targetProject.teamId);
+      (Boolean(currentUser.email) &&
+        Boolean(targetProject.authorEmail) &&
+        targetProject.authorEmail!.toLowerCase() === currentUser.email.toLowerCase());
     const isAdmin = currentUser.role === "ADMIN";
     if (!isAuthor && !isAdmin) {
-      return { success: false, message: "본인 팀이 작성한 프로젝트만 수정할 수 있습니다." };
+      return { success: false, message: "출품 등록한 대표자 본인(또는 관리자)만 프로젝트를 수정할 수 있습니다." };
     }
 
     // [핵심 정책 4번] 펀딩 진행 중이거나 출품 등록 스위치가 닫혀있으면 학생은 수정 불가!
@@ -971,6 +1069,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ? "⚠️ 현재 펀딩(모의투자)이 진행 중이므로 출품작을 수정할 수 없습니다."
           : "⚠️ 현재 출품 등록/수정 시간이 마감되어 출품작을 수정할 수 없습니다.",
       };
+    }
+
+    // 수정 시 새로 추가한 팀원이 이미 다른 프로젝트의 대표자 또는 팀원인지 검증
+    if (updatedFields.teamMemberDetails && updatedFields.teamMemberDetails.length > 0) {
+      for (const mem of updatedFields.teamMemberDetails) {
+        const conflict = findUserSubmittedOrMemberProject(mem, updatedFields.id);
+        if (conflict) {
+          return {
+            success: false,
+            message: `팀원으로 선택한 [${mem.name} (${mem.email})] 아이디는 이미 [${conflict.project.teamName} - ${conflict.project.title}] 프로젝트의 ${
+              conflict.role === "AUTHOR" ? "출품 대표자" : "팀원"
+            }로 등록되어 있어 중복 지정할 수 없습니다.`,
+          };
+        }
+      }
     }
 
     return runWithMutationLock(
@@ -1338,6 +1451,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toggleCourseActive,
         toggleCourseSwitch,
         findCourseByInviteCode,
+        findUserSubmittedOrMemberProject,
         canStudentEditProject,
         currentUser,
         isLoggedIn,
